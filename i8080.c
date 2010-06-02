@@ -2,18 +2,21 @@
 #include <stdlib.h>
 
 
-#define DEBUG
 
 
-//////// My macro for printing debug info
+/* Macro for printing debug info */
 #ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...)    printf(fmt, ## args)
+#define DEBUG_PRINT(fmt, args...)    fprintf(stderr,fmt, ## args)
 #else
 #define DEBUG_PRINT(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-
+/* The memory of the venerable MITS Altair 8800 */
 unsigned char mem[0xFFFF];
+
+/* Tx Rx values */
+#define RxStat_BIT	0x01	// Ready to receive
+#define TxStat_BIT	0x02	// Ready to transmit
 
 /* i8080 CPU */
 /* opcode cycles */
@@ -113,7 +116,7 @@ static struct {
 #define ISPLUS()        ((RES&0x80)==0)
 #define ISMIN()         ((RES&0x80)!=0)
 
-#define R8(a)           mem[a]
+#define R8(a)           mem[(a)]
 #define R16(a)          (R8((a)+1)<<8|(R8(a)))
 #define W8(a,v)         mem[(a)]=v
 #define PUSH16(v)       SP-=2; W8(SP,(v)&0xff); W8(SP+1,(v)>>8&0xff)
@@ -146,13 +149,14 @@ static unsigned char key=0;
 static unsigned char in_port(unsigned char port)
 {
     unsigned char ret=port;
-	    DEBUG_PRINT("--> in port %X\n",port);
 
     switch (port) {
-case 0x0:
-ret=0x0;
-break;
+	case 0x0:
+	    ret=0x0;
+	    break;
 	default: 
+	    DEBUG_PRINT("--> IN port %X\n",port);
+	    ret=0x0;
 	    break;
     }
 
@@ -163,9 +167,11 @@ static void out_port(unsigned char port,unsigned char v)
 {
     switch (port) {
 
-
+	case 0x1:
+	    printf("%c",v&0x7F);
+	    break;
 	default: 
-	    DEBUG_PRINT("%X<-- out port %X\n",port,v);
+	    DEBUG_PRINT("%c<-- OUT port %X\n",v&0x7F,port);
 	    break;
 
     }
@@ -174,6 +180,7 @@ static void out_port(unsigned char port,unsigned char v)
 /* INTERRUPTS */
 static void interrupt(int i)
 {
+    DEBUG_PRINT("INTERUPTION\n");
     if (cpu.i) {
 	cpu.i=cpu.ipend=0;
 	cpu.cycles-=11;
@@ -191,7 +198,7 @@ static void cpu_run(int cycles)
 
     while (cpu.cycles>0) {
 
-	DEBUG_PRINT("%04x:%10s a%02X f%02X b%02X c%02X d%02X e%02X h%02X l%02X sp%04X\n",PC,lut_mnemonic[mem[PC]],A,F,B,C,D,E,H,L,SP);
+	DEBUG_PRINT("%04x:%10s @pc:%02X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
 	cpu.cycles-=lut_cycles[opcode];
 
@@ -538,9 +545,9 @@ void loadCoreMem(char *file)
 	rewind(fp);
 	fread(mem,1,fileSize,fp);	
     }
-else { //ERROR
-    DEBUG_PRINT("Cannot read bin file \n");
-}
+    else { //ERROR
+	DEBUG_PRINT("Cannot read bin file \n");
+    }
 
 }
 
@@ -548,5 +555,5 @@ int main(int argc, char** argv){
 
     loadCoreMem("4kbas.bin");
     PC = 0x0;
-    cpu_run(1000);
+    cpu_run(10000);
 }
