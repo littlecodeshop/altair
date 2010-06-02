@@ -5,8 +5,15 @@
 #define DEBUG
 
 
+//////// My macro for printing debug info
+#ifdef DEBUG
+#define DEBUG_PRINT(fmt, args...)    printf(fmt, ## args)
+#else
+#define DEBUG_PRINT(fmt, args...)    /* Don't do anything in release builds */
+#endif
 
-char mem[0xFFFF];
+
+unsigned char mem[0xFFFF];
 
 /* i8080 CPU */
 /* opcode cycles */
@@ -106,9 +113,9 @@ static struct {
 #define ISPLUS()        ((RES&0x80)==0)
 #define ISMIN()         ((RES&0x80)!=0)
 
-#define R8(a)           mem[((a)>0x1fff)?((a)&0x1fff)|0x2000:a]
+#define R8(a)           mem[a]
 #define R16(a)          (R8((a)+1)<<8|(R8(a)))
-#define W8(a,v)         if ((a)>0x1fff) mem[((a)&0x1fff)|0x2000]=v
+#define W8(a,v)         mem[(a)]=v
 #define PUSH16(v)       SP-=2; W8(SP,(v)&0xff); W8(SP+1,(v)>>8&0xff)
 #define POP16()         R16(SP); SP+=2
 #define JUMP()          PC=R16(PC)
@@ -131,23 +138,22 @@ static struct {
 #define XRA(r)          RES=A=A^r
 #define ORA(r)          RES=A=A|r
 
-/* HW PORTS */
-static unsigned char shift_offset=0;
-static unsigned short shift_reg=0;
 
 static unsigned char key=0;
+
 
 
 static unsigned char in_port(unsigned char port)
 {
     unsigned char ret=port;
+	    DEBUG_PRINT("--> in port %X\n",port);
 
     switch (port) {
-	case 1: break;
-	case 2: break;
-	case 3: break;
-
-	default: break;
+case 0x0:
+ret=0x0;
+break;
+	default: 
+	    break;
     }
 
     return ret;
@@ -157,13 +163,11 @@ static void out_port(unsigned char port,unsigned char v)
 {
     switch (port) {
 
-	case 2: break;
-	case 3: break; /* sound */
-	case 4: break;
-	case 5: break; /* sound */
-	case 6: /*if (v<26) printf("%c",v+65);*/ break; /* strange 'debug' port? */
 
-	default: break;
+	default: 
+	    DEBUG_PRINT("%X<-- out port %X\n",port,v);
+	    break;
+
     }
 }
 
@@ -187,6 +191,7 @@ static void cpu_run(int cycles)
 
     while (cpu.cycles>0) {
 
+	DEBUG_PRINT("%04x:%10s a%02X f%02X b%02X c%02X d%02X e%02X h%02X l%02X sp%04X\n",PC,lut_mnemonic[mem[PC]],A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
 	cpu.cycles-=lut_cycles[opcode];
 
@@ -516,17 +521,32 @@ static void cpu_run(int cycles)
 	    default: break;
 	}
 
-#ifdef DEBUG
-	printf("%04x:%10s a%02X f%02X b%02X c%02X d%02X e%02X h%02X l%02X sp%04X\n",PC,lut_mnemonic[opcode],A,F,B,C,D,E,H,L,SP);
-#endif
 
 
     }
 }
 
+
+void loadCoreMem(char *file)
+{
+    FILE * fp;
+    fp = fopen(file,"rb");
+    if(fp){
+	//get size of file
+	fseek(fp, 0, SEEK_END);
+	long fileSize = ftell(fp);
+	rewind(fp);
+	fread(mem,1,fileSize,fp);	
+    }
+else { //ERROR
+    DEBUG_PRINT("Cannot read bin file \n");
+}
+
+}
+
 int main(int argc, char** argv){
 
-printf("%ld",sizeof(unsigned short));
-
-
+    loadCoreMem("4kbas.bin");
+    PC = 0x0;
+    cpu_run(1000);
 }
