@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
-
-
 /* Macro for printing debug info */
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...)    fprintf(stderr,fmt, ## args)
@@ -143,19 +140,29 @@ static struct {
 
 
 static unsigned char key=0;
-
-
+unsigned char buffer[3];
+int bcount = 0;
 
 static unsigned char in_port(unsigned char port)
 {
     unsigned char ret=port;
+    DEBUG_PRINT("--> IN port %X\n",port);
 
     switch (port) {
 	case 0x0:
-	    ret=0x0;
+	    if(_kbhit()){
+		buffer[0] = _getch();
+		bcount = 1;
+	    }
+	    ret = 0x0; 
+	    break;
+	case 1:
+	    if(bcount>0){
+		ret = buffer[0];
+		bcount = 0;
+	    }
 	    break;
 	default: 
-	    DEBUG_PRINT("--> IN port %X\n",port);
 	    ret=0x0;
 	    break;
     }
@@ -168,10 +175,11 @@ static void out_port(unsigned char port,unsigned char v)
     switch (port) {
 
 	case 0x1:
+	    DEBUG_PRINT("%c<-- OUT port %X\n",v&0x7F,port);
 	    printf("%c",v&0x7F);
 	    break;
 	default: 
-	    DEBUG_PRINT("%c<-- OUT port %X\n",v&0x7F,port);
+	    DEBUG_PRINT("%c<-- OUT port %X\n",v,port);
 	    break;
 
     }
@@ -555,5 +563,7 @@ int main(int argc, char** argv){
 
     loadCoreMem("4kbas.bin");
     PC = 0x0;
-    cpu_run(10000);
+while(1){
+    cpu_run(1000);
+}
 }
