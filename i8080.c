@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+//OpenGL includes
+
+#include <OpenGL/gl.h>
+#include <OpenGL/glu.h>
+#include <GLUT/glut.h>
+
+static GLfloat spin = 0.0;
 int starttrace=0;
 #define DEBUG
 /* Macro for printing debug info */
@@ -187,22 +194,17 @@ static unsigned char in_port(unsigned char port)
 
     switch (port) {
 	case 0x00:
-	    if(_kbhit()){
-		buffer[0] = _getch();
-		bcount = 1;
-	    }
-	    ret = 0x0; 
 	    break;
 	case 0x10:    
 	    ret = TxStat_BIT;
-	    if(_kbhit()){
+	    /*if(_kbhit()){
 		//check if it is a control caracter for DSK
 		char c = _getch();
 		buffer[0] = c;
 		bcount = 1;
-	    }
+	    }*/
 	    if(bcount)
-	    ret = ret|RxStat_BIT;
+		ret = ret|RxStat_BIT;
 	    break;
 	case 0x01:
 	    if(bcount>0){
@@ -266,7 +268,7 @@ static void cpu_run(int cycles)
     cpu.cycles+=cycles;
 
     while (cpu.cycles>0) {
-if(cpu.reg.pc == 0x0E30) starttrace=1;
+if(cpu.reg.pc == 0x0E6C) starttrace=1;
 	if(starttrace)
 	DEBUG_PRINT("%04x:%10s @pc:%02X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
@@ -622,11 +624,125 @@ void loadCoreMem(char *file)
 
 }
 
+void emuRun(void){
+cpu_run(1000);
+}
+
+void init(void) 
+{
+    glClearColor (0.0, 0.0, 0.0, 0.0);
+    glClearDepth(1.0);
+    glShadeModel (GL_SMOOTH);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_LIGHT0);
+}
+void drawAxis()
+{
+    glPushMatrix();
+    // Je veux pas de lightning ici
+    glDisable(GL_LIGHTING);
+    //I draw 2 axis
+    glColor3f(1.0,0.0,0.0);
+    glBegin(GL_LINES);
+
+    glColor3f(1.0, 0.0, 0.0);                  /* red */ 
+    glVertex3f(-5.0,0.0,0.0);
+    glVertex3f(5.0,0.0,0.0);
+
+    glColor3f(0.0, 1.0, 0.0);                  /* Green */ 
+    glVertex3f(0.0,-5.0,0.0);
+    glVertex3f(0.0,5.0,0.0);
+
+    glColor3f(0.0, 0.0, 1.0);                  /* Blue */ 
+    glVertex3f(0.0,0.0,-5.0);
+    glVertex3f(0.0,0.0,5.0);
+
+    glEnd();
+    glEnable(GL_LIGHTING);
+    glPopMatrix();     
+
+}
+void display(void)
+{
+
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+    glLoadIdentity();
+
+    drawAxis();
+
+    glEnable(GL_LIGHTING);
+    glPushMatrix();
+    glRotatef(spin,1.0,1.0,1.0);
+    glTranslatef(.0,.0,-4.0);
+    glutSolidTeapot(.9);
+    drawAxis();
+    //Le cube tourne autour de l'axe de la tasse rotate->translate
+    glPushMatrix();
+    glRotatef(spin*2,1.0,1.0,1.0);
+    glTranslatef(1.0,.0,-1);
+    //et aussi autour de lui meme 
+    glRotatef(spin*3,1.0,1.0,1.0);
+    glTranslatef(2.0,.0,-0.5);
+    glutSolidCube(.8);
+    drawAxis();
+    glPopMatrix();
+    glPopMatrix();
+    glDisable(GL_LIGHTING);
+
+    glutSwapBuffers();
+
+
+}
+void reshape(int w, int h)
+{
+    glViewport (0, 0, (GLsizei) w, (GLsizei) h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(-5.0, 5.0, -5.0, 5.0, -5.0, 5.0);
+    //glFrustum (-5.0, 5.0, -5.0, 5.0, 2.0, 10.0);
+
+    glMatrixMode(GL_MODELVIEW);
+    //glLoadIdentity();
+}
+void mouse(int button, int state, int x, int y) 
+{
+    switch (button) {
+	case GLUT_LEFT_BUTTON:
+	    break;
+	case GLUT_RIGHT_BUTTON:
+	    break;
+	default:
+	    break;
+    }
+}
+
+void keyboard(unsigned char key, int x, int y) {
+    if (key == 27) 
+	exit(0);
+    else
+    {
+	buffer[0] = key;
+	bcount=1;
+    }
+}
+
+
 int main(int argc, char** argv){
 
-    loadCoreMem("8kbas.bin");
+    loadCoreMem("4kbas.bin");
     PC = 0x0;
-    while(1){
-	cpu_run(1000);
-    }
+    glutInit(&argc, argv);
+    //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
+    glutInitDisplayMode (GLUT_DOUBLE | GLUT_RGBA|GLUT_DEPTH);
+    glutInitWindowSize (250, 250); 
+    glutInitWindowPosition (100, 100);
+    glutCreateWindow (argv[0]);
+    init ();
+    glutDisplayFunc(display); 
+    glutReshapeFunc(reshape); 
+    glutMouseFunc(mouse);
+    glutKeyboardFunc(keyboard);
+    glutIdleFunc(emuRun);
+    glutMainLoop();
+    return 0;
 }
