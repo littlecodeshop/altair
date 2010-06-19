@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+int starttrace=0;
+#define DEBUG
 /* Macro for printing debug info */
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...)    fprintf(stderr,fmt, ## args)
@@ -10,6 +12,41 @@
 
 /* The memory of the venerable MITS Altair 8800 */
 unsigned char mem[0xFFFF];
+
+/* Bit manipulation and parity tables */
+#define BIT(n)                  ( 1<<(n) )
+
+#define BIT_SET(y, mask)        ( y |=  (mask) )
+#define BIT_CLEAR(y, mask)      ( y &= ~(mask) )
+#define BIT_FLIP(y, mask)       ( y ^=  (mask) )
+
+
+
+
+  /*
+   Set bits        Clear bits      Flip bits
+   y        0x0011          0x0011          0x0011
+   mask     0x0101 |        0x0101 &~       0x0101 ^
+   	    ---------       ----------      ---------
+   result   0x0111          0x0010          0x0110
+   */
+
+////////////////////////////////////////////////////////////////////////////////
+//    Examples:
+//    mask= BIT(0) | BIT(8);      // Create mask with bit 0 and 8 set (0x0101)
+
+//    BIT_SET(y, mask);           // Bits 0 and 8 of y have been set.
+//    BIT_CLEAR(y, mask);         // Bits 0 and 8 of y have been cleared.
+//    BIT_FLIP(y, mask);          // Bits 0 and 8 of y have been flipped.
+
+
+unsigned char ParityTable256[256] = 
+{
+#   define P2(n) n, n^1, n^1, n
+#   define P4(n) P2(n), P2(n^1), P2(n^1), P2(n)
+#   define P6(n) P4(n), P4(n^1), P4(n^1), P4(n)
+    P6(0), P6(1), P6(1), P6(0)
+};
 
 /* Tx Rx values */
 #define RxStat_BIT	0x01	// Ready to receive
@@ -146,19 +183,42 @@ int bcount = 0;
 static unsigned char in_port(unsigned char port)
 {
     unsigned char ret=port;
-    DEBUG_PRINT("--> IN port %X\n",port);
+    //DEBUG_PRINT("--> IN port %X\n",port);
 
     switch (port) {
-	case 0x0:
+	case 0x00:
 	    if(_kbhit()){
 		buffer[0] = _getch();
 		bcount = 1;
 	    }
 	    ret = 0x0; 
 	    break;
-	case 1:
+	case 0x10:    
+	    ret = TxStat_BIT;
+	    if(_kbhit()){
+		//check if it is a control caracter for DSK
+		char c = _getch();
+		buffer[0] = c;
+		bcount = 1;
+	    }
+	    if(bcount)
+	    ret = ret|RxStat_BIT;
+	    break;
+	case 0x01:
 	    if(bcount>0){
 		ret = buffer[0];
+		bcount = 0;
+	    }
+	    break;
+	case 0x11:    
+	    {
+		unsigned char b = buffer[0];
+		unsigned char parity = ParityTable256[b];
+		if(parity){
+		    unsigned char mask=0x80;
+		    BIT_SET(b, mask); 
+		}
+		ret = b;
 		bcount = 0;
 	    }
 	    break;
@@ -175,11 +235,12 @@ static void out_port(unsigned char port,unsigned char v)
     switch (port) {
 
 	case 0x1:
+	case 0x11:
 	    DEBUG_PRINT("%c<-- OUT port %X\n",v&0x7F,port);
 	    printf("%c",v&0x7F);
 	    break;
 	default: 
-	    DEBUG_PRINT("%c<-- OUT port %X\n",v,port);
+	 //   DEBUG_PRINT("%c<-- OUT port %X\n",v,port);
 	    break;
 
     }
@@ -205,7 +266,8 @@ static void cpu_run(int cycles)
     cpu.cycles+=cycles;
 
     while (cpu.cycles>0) {
-
+if(cpu.reg.pc == 0x0E30) starttrace=1;
+	if(starttrace)
 	DEBUG_PRINT("%04x:%10s @pc:%02X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
 	cpu.cycles-=lut_cycles[opcode];
@@ -552,6 +614,7 @@ void loadCoreMem(char *file)
 	long fileSize = ftell(fp);
 	rewind(fp);
 	fread(mem,1,fileSize,fp);	
+	
     }
     else { //ERROR
 	DEBUG_PRINT("Cannot read bin file \n");
@@ -561,9 +624,9 @@ void loadCoreMem(char *file)
 
 int main(int argc, char** argv){
 
-    loadCoreMem("4kbas.bin");
+    loadCoreMem("8kbas.bin");
     PC = 0x0;
-while(1){
-    cpu_run(1000);
-}
+    while(1){
+	cpu_run(1000);
+    }
 }
