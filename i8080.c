@@ -729,8 +729,9 @@ void keyboard(unsigned char key, int x, int y) {
 
 int main(int argc, char** argv){
 
-int i;
-	for (i=0;i<0x100;i++) lut_parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));
+    //put this parity thing somewhere else or at least understand it !
+    int i;
+    for (i=0;i<0x100;i++) lut_parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));
 
     loadCoreMem("4kbas.bin");
     PC = 0x0;
