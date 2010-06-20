@@ -268,9 +268,9 @@ static void cpu_run(int cycles)
     cpu.cycles+=cycles;
 
     while (cpu.cycles>0) {
-if(cpu.reg.pc == 0x0E6C) starttrace=1;
+if(cpu.reg.pc == 0x09DE) starttrace=1;
 	if(starttrace)
-	DEBUG_PRINT("%04x:%10s @pc:%02X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],A,F,B,C,D,E,H,L,SP);
+	DEBUG_PRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],RES,A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
 	cpu.cycles-=lut_cycles[opcode];
 
