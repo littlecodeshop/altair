@@ -190,8 +190,8 @@ int bcount = 0;
 static unsigned char in_port(unsigned char port)
 {
     unsigned char ret=port;
-    //DEBUG_PRINT("--> IN port %X\n",port);
 
+    //DEBUG_PRINT("--> IN port %X\n",port);
     switch (port) {
 	case 0x00:
 	    break;
@@ -268,9 +268,9 @@ static void cpu_run(int cycles)
     cpu.cycles+=cycles;
 
     while (cpu.cycles>0) {
-if(cpu.reg.pc == 0x09DE) starttrace=1;
-	if(starttrace)
-	DEBUG_PRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],RES,A,F,B,C,D,E,H,L,SP);
+//if(cpu.reg.pc == 0x0C07) starttrace=1;
+//	if(starttrace)
+//	DEBUG_PRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],RES,A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
 	cpu.cycles-=lut_cycles[opcode];
 
@@ -728,6 +728,9 @@ void keyboard(unsigned char key, int x, int y) {
 
 
 int main(int argc, char** argv){
+
+int i;
+	for (i=0;i<0x100;i++) lut_parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));
 
     loadCoreMem("4kbas.bin");
     PC = 0x0;
