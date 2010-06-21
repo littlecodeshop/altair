@@ -238,8 +238,9 @@ static void out_port(unsigned char port,unsigned char v)
 
 	case 0x1:
 	case 0x11:
-	    DEBUG_PRINT("%c<-- OUT port %X\n",v&0x7F,port);
+	    //DEBUG_PRINT("%c<-- OUT port %X\n",v&0x7F,port);
 	    printf("%c",v&0x7F);
+	    fflush(stdout);
 	    break;
 	default: 
 	 //   DEBUG_PRINT("%c<-- OUT port %X\n",v,port);
