@@ -7,8 +7,15 @@
 #include <OpenGL/glu.h>
 #include <GLUT/glut.h>
 
+
+#include "i8080.h"
+
+static I8080_CPU cpu;
+
 static GLfloat spin = 0.0;
 int starttrace=0;
+
+
 #define DEBUG
 /* Macro for printing debug info */
 #ifdef DEBUG
@@ -105,28 +112,6 @@ static const char* lut_mnemonic[0x100]={
 };
 #endif
 
-static struct {
-
-    union {
-	struct {
-	    unsigned short pc;              /* programcounter */
-	    unsigned short sp;              /* stackpointer */
-	    unsigned short psw,bc,de,hl;    /* register pairs */
-	};
-	struct {
-	    unsigned char pc_low,pc_high;
-	    unsigned char sp_low,sp_high;
-	    unsigned char flags;            /* sz0a0p1c */
-	    unsigned char a,c,b,e,d,l,h;    /* regs */
-	};
-    } reg;
-
-    int cycles;
-    unsigned short result;                          /* temp result */
-    unsigned char i;                                /* interrupt bit */
-    unsigned char ipend;                            /* pending int */
-    unsigned char a;                                /* aux carry bit */
-} cpu;
 
 #define A               cpu.reg.a
 #define F               cpu.reg.flags
@@ -181,7 +166,6 @@ static struct {
 #define ANA(r)          RES=A=A&r
 #define XRA(r)          RES=A=A^r
 #define ORA(r)          RES=A=A|r
-
 
 static unsigned char key=0;
 unsigned char buffer[3];
