@@ -23,6 +23,6 @@ typedef struct {
     unsigned char a;                                /* aux carry bit */
 } I8080_CPU;
 
-void initCPU(unsigned char * memptr);
+void initCPU(unsigned char * memptr, I8080_CPU * acpu);
 static void cpu_run(int cycles);
 #endif 

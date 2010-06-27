@@ -86,7 +86,7 @@ static const unsigned char lut_cycles[0x100]={
     5, 10,10,4, 11,11,7, 11,5, 5, 10,4, 11,0, 7, 11
 };
 
-static unsigned char lut_parity[0x100]; /* quick parity flag lookuptable, 4: even, 0: uneven */
+static unsigned char parity[0x100]; /* quick parity flag lookuptable, 4: even, 0: uneven */
 
 
 /* opcode mnemonics (debug) */
@@ -136,8 +136,8 @@ static const char* lut_mnemonic[0x100]={
 #define ISZERO()        ((RES&0xff)==0)
 #define ISNOTCARRY()    ((RES&0x100)==0)
 #define ISCARRY()       ((RES&0x100)!=0)
-#define ISPODD()        (lut_parity[RES&0xff]==0)
-#define ISPEVEN()       (lut_parity[RES&0xff]!=0)
+#define ISPODD()        (parity[RES&0xff]==0)
+#define ISPEVEN()       (parity[RES&0xff]!=0)
 #define ISPLUS()        ((RES&0x80)==0)
 #define ISMIN()         ((RES&0x80)!=0)
 
@@ -361,12 +361,12 @@ static void cpu_run(int cycles)
 	    case 0xc5: PUSH16(BC); break;                   /* push b */
 	    case 0xd5: PUSH16(DE); break;                   /* push d */
 	    case 0xe5: PUSH16(HL); break;                   /* push h */
-	    case 0xf5: F=(RES>>8&1)|2|lut_parity[RES&0xff]|(cpu->a<<4)|(((RES&0xff)==0)<<6)|(RES&0x80); PUSH16(PSW); break;  /* push psw */
+	    case 0xf5: F=(RES>>8&1)|2|parity[RES&0xff]|(cpu->a<<4)|(((RES&0xff)==0)<<6)|(RES&0x80); PUSH16(PSW); break;  /* push psw */
 
 	    case 0xc1: BC=POP16(); break;                   /* pop b */
 	    case 0xd1: DE=POP16(); break;                   /* pop d */
 	    case 0xe1: HL=POP16(); break;                   /* pop h */
-	    case 0xf1: PSW=POP16(); RES=(F<<8&0x100)|(lut_parity[F&0x80]!=(F&4))|(F&0x80)|((F&0x40)?0:6); cpu->a=F>>4&1; break;      /* pop psw */
+	    case 0xf1: PSW=POP16(); RES=(F<<8&0x100)|(parity[F&0x80]!=(F&4))|(F&0x80)|((F&0x40)?0:6); cpu->a=F>>4&1; break;      /* pop psw */
 
 	    case 0xe3: L^=R8(SP); W8(SP,R8(SP)^L); L^=R8(SP); H^=R8(SP+1); W8(SP+1,R8(SP+1)^H); H^=R8(SP+1); break; /* xthl */
 
@@ -692,21 +692,24 @@ void keyboard(unsigned char key, int x, int y) {
     }
 }
 
-void initCPU(unsigned char * memptr){
+void initCPU(unsigned char * memptr, I8080_CPU * acpu){
     mem = memptr; //we set the memory for access
+    cpu = acpu;
+
+    //Create a lookup table for the parity
+    int i;
+    for (i=0;i<0x100;i++) parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));
+    //start the CPU with 0 PC
+    PC = 0x0;
 }
 
 int main(int argc, char** argv){
 
-cpu = malloc(sizeof(I8080_CPU));
+I8080_CPU *icpu = malloc(sizeof(I8080_CPU));
 unsigned char * amem = malloc(0XFFFF);
-initCPU(amem);
-    //put this parity thing somewhere else or at least understand it !
-    int i;
-    for (i=0;i<0x100;i++) lut_parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));
+initCPU(amem,icpu);
 
     loadCoreMem("4kbas.bin");
-    PC = 0x0;
     glutInit(&argc, argv);
     //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
     glutInitDisplayMode (GLUT_DOUBLE | GLUT_RGBA|GLUT_DEPTH);
