@@ -21,6 +21,10 @@ typedef struct {
     unsigned char i;                                /* interrupt bit */
     unsigned char ipend;                            /* pending int */
     unsigned char a;                                /* aux carry bit */
+
+    void (* out_port_ptr)(unsigned char port,unsigned char v); /* port output */
+    unsigned char (* in_port_ptr)(unsigned char port); 		/*port input */
+
 } I8080_CPU;
 
 void initCPU(unsigned char * memptr, I8080_CPU * acpu);

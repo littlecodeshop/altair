@@ -708,6 +708,8 @@ int main(int argc, char** argv){
 I8080_CPU *icpu = malloc(sizeof(I8080_CPU));
 unsigned char * amem = malloc(0XFFFF);
 initCPU(amem,icpu);
+icpu->out_port_ptr = out_port;
+icpu->in_port_ptr = in_port;
 
     loadCoreMem("4kbas.bin");
     glutInit(&argc, argv);
