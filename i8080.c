@@ -23,8 +23,6 @@ int starttrace=0;
 #define LCS_DPRINT(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-/* The memory of the venerable MITS Altair 8800 */
-unsigned char *mem;
 
 /* Bit manipulation and parity tables */
 #define BIT(n)                  ( 1<<(n) )
@@ -36,11 +34,11 @@ unsigned char *mem;
 
 
 
-  /*
+/*
    Set bits        Clear bits      Flip bits
    y        0x0011          0x0011          0x0011
    mask     0x0101 |        0x0101 &~       0x0101 ^
-   	    ---------       ----------      ---------
+   ---------       ----------      ---------
    result   0x0111          0x0010          0x0110
    */
 
@@ -141,9 +139,9 @@ static const char* lut_mnemonic[0x100]={
 #define ISPLUS()        ((RES&0x80)==0)
 #define ISMIN()         ((RES&0x80)!=0)
 
-#define R8(a)           mem[(a)]
+#define R8(a)           cpu->mem[(a)]
 #define R16(a)          (R8((a)+1)<<8|(R8(a)))
-#define W8(a,v)         mem[(a)]=v
+#define W8(a,v)         cpu->mem[(a)]=v
 #define PUSH16(v)       SP-=2; W8(SP,(v)&0xff); W8(SP+1,(v)>>8&0xff)
 #define POP16()         R16(SP); SP+=2
 #define JUMP()          PC=R16(PC)
@@ -181,10 +179,10 @@ static unsigned char in_port(unsigned char port)
 	case 0x10:    
 	    ret = TxStat_BIT;
 	    /*if(_kbhit()){
-		//check if it is a control caracter for DSK
-		char c = _getch();
-		buffer[0] = c;
-		bcount = 1;
+	    //check if it is a control caracter for DSK
+	    char c = _getch();
+	    buffer[0] = c;
+	    bcount = 1;
 	    }*/
 	    if(bcount)
 		ret = ret|RxStat_BIT;
@@ -226,7 +224,7 @@ static void out_port(unsigned char port,unsigned char v)
 	    fflush(stdout);
 	    break;
 	default: 
-	 //   LCS_DPRINT("%c<-- OUT port %X\n",v,port);
+	    //   LCS_DPRINT("%c<-- OUT port %X\n",v,port);
 	    break;
 
     }
@@ -252,9 +250,9 @@ static void cpu_run(int cycles)
     cpu->cycles+=cycles;
 
     while (cpu->cycles>0) {
-//if(cpu->reg.pc == 0x0C07) starttrace=1;
-//	if(starttrace)
-//	LCS_DPRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],RES,A,F,B,C,D,E,H,L,SP);
+	//if(cpu->reg.pc == 0x0C07) starttrace=1;
+	//	if(starttrace)
+	//	LCS_DPRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[cpu->mem[PC]],cpu->mem[PC],RES,A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
 	cpu->cycles-=lut_cycles[opcode];
 
@@ -599,8 +597,8 @@ void loadCoreMem(char *file)
 	fseek(fp, 0, SEEK_END);
 	long fileSize = ftell(fp);
 	rewind(fp);
-	fread(mem,1,fileSize,fp);	
-	
+	fread(cpu->mem,1,fileSize,fp);	
+
     }
     else { //ERROR
 	LCS_DPRINT("Cannot read bin file \n");
@@ -609,7 +607,7 @@ void loadCoreMem(char *file)
 }
 
 void emuRun(void){
-cpu_run(1000);
+    cpu_run(1000);
 }
 
 void init(void) 
@@ -682,18 +680,18 @@ void mouse(int button, int state, int x, int y)
     }
 }
 
-void keyboard(unsigned char key, int x, int y) {
-    if (key == 27) 
-	exit(0);
-    else
-    {
-	buffer[0] = key;
-	bcount=1;
+    void keyboard(unsigned char key, int x, int y) {
+	if (key == 27) 
+	    exit(0);
+	else
+	{
+	    buffer[0] = key;
+	    bcount=1;
+	}
     }
-}
 
-void initCPU(unsigned char * memptr, I8080_CPU * acpu){
-    mem = memptr; //we set the memory for access
+void initCPU(I8080_CPU * acpu){
+
     cpu = acpu;
 
     //Create a lookup table for the parity
@@ -705,11 +703,12 @@ void initCPU(unsigned char * memptr, I8080_CPU * acpu){
 
 int main(int argc, char** argv){
 
-I8080_CPU *icpu = malloc(sizeof(I8080_CPU));
-unsigned char * amem = malloc(0XFFFF);
-initCPU(amem,icpu);
-icpu->out_port_ptr = out_port;
-icpu->in_port_ptr = in_port;
+    I8080_CPU *icpu = malloc(sizeof(I8080_CPU));
+    unsigned char * amem = malloc(0XFFFF);
+    initCPU(icpu);
+    icpu->out_port_ptr = out_port;
+    icpu->in_port_ptr = in_port;
+    icpu->mem = amem;
 
     loadCoreMem("4kbas.bin");
     glutInit(&argc, argv);

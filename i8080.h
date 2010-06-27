@@ -22,11 +22,13 @@ typedef struct {
     unsigned char ipend;                            /* pending int */
     unsigned char a;                                /* aux carry bit */
 
+    unsigned char * mem;                             /* Core */
+
     void (* out_port_ptr)(unsigned char port,unsigned char v); /* port output */
     unsigned char (* in_port_ptr)(unsigned char port); 		/*port input */
 
 } I8080_CPU;
 
-void initCPU(unsigned char * memptr, I8080_CPU * acpu);
+void initCPU( I8080_CPU * acpu);
 static void cpu_run(int cycles);
 #endif 
