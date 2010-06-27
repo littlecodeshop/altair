@@ -1,4 +1,5 @@
-
+#ifndef LCS_I8080_H
+#define LCS_I8080_H
 typedef struct {
 
     union {
@@ -23,3 +24,5 @@ typedef struct {
 } I8080_CPU;
 
 void initCPU(unsigned char * memptr);
+static void cpu_run(int cycles);
+#endif 

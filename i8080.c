@@ -12,7 +12,6 @@
 
 static I8080_CPU cpu;
 
-static GLfloat spin = 0.0;
 int starttrace=0;
 
 
@@ -655,24 +654,6 @@ void display(void)
 
     drawAxis();
 
-    glEnable(GL_LIGHTING);
-    glPushMatrix();
-    glRotatef(spin,1.0,1.0,1.0);
-    glTranslatef(.0,.0,-4.0);
-    glutSolidTeapot(.9);
-    drawAxis();
-    //Le cube tourne autour de l'axe de la tasse rotate->translate
-    glPushMatrix();
-    glRotatef(spin*2,1.0,1.0,1.0);
-    glTranslatef(1.0,.0,-1);
-    //et aussi autour de lui meme 
-    glRotatef(spin*3,1.0,1.0,1.0);
-    glTranslatef(2.0,.0,-0.5);
-    glutSolidCube(.8);
-    drawAxis();
-    glPopMatrix();
-    glPopMatrix();
-    glDisable(GL_LIGHTING);
 
     glutSwapBuffers();
 
