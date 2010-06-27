@@ -15,12 +15,12 @@ I8080_CPU *cpu;
 int starttrace=0;
 
 
-#define DEBUG
+#define LCS_DEBUG
 /* Macro for printing debug info */
-#ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...)    fprintf(stderr,fmt, ## args)
+#ifdef LCS_DEBUG
+#define LCS_DPRINT(fmt, args...)    fprintf(stderr,fmt, ## args)
 #else
-#define DEBUG_PRINT(fmt, args...)    /* Don't do anything in release builds */
+#define LCS_DPRINT(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
 /* The memory of the venerable MITS Altair 8800 */
@@ -90,7 +90,7 @@ static unsigned char parity[0x100]; /* quick parity flag lookuptable, 4: even, 0
 
 
 /* opcode mnemonics (debug) */
-#ifdef DEBUG
+#ifdef LCS_DEBUG
 static const char* lut_mnemonic[0x100]={
     "nop",     "lxi b,#", "stax b",  "inx b",   "inr b",   "dcr b",   "mvi b,#", "rlc",     "ill",     "dad b",   "ldax b",  "dcx b",   "inr c",   "dcr c",   "mvi c,#", "rrc",
     "ill",     "lxi d,#", "stax d",  "inx d",   "inr d",   "dcr d",   "mvi d,#", "ral",     "ill",     "dad d",   "ldax d",  "dcx d",   "inr e",   "dcr e",   "mvi e,#", "rar",
@@ -174,7 +174,7 @@ static unsigned char in_port(unsigned char port)
 {
     unsigned char ret=port;
 
-    //DEBUG_PRINT("--> IN port %X\n",port);
+    //LCS_DPRINT("--> IN port %X\n",port);
     switch (port) {
 	case 0x00:
 	    break;
@@ -221,12 +221,12 @@ static void out_port(unsigned char port,unsigned char v)
 
 	case 0x1:
 	case 0x11:
-	    //DEBUG_PRINT("%c<-- OUT port %X\n",v&0x7F,port);
+	    //LCS_DPRINT("%c<-- OUT port %X\n",v&0x7F,port);
 	    printf("%c",v&0x7F);
 	    fflush(stdout);
 	    break;
 	default: 
-	 //   DEBUG_PRINT("%c<-- OUT port %X\n",v,port);
+	 //   LCS_DPRINT("%c<-- OUT port %X\n",v,port);
 	    break;
 
     }
@@ -235,7 +235,7 @@ static void out_port(unsigned char port,unsigned char v)
 /* INTERRUPTS */
 static void interrupt(int i)
 {
-    DEBUG_PRINT("INTERUPTION\n");
+    LCS_DPRINT("INTERUPTION\n");
     if (cpu->i) {
 	cpu->i=cpu->ipend=0;
 	cpu->cycles-=11;
@@ -254,7 +254,7 @@ static void cpu_run(int cycles)
     while (cpu->cycles>0) {
 //if(cpu->reg.pc == 0x0C07) starttrace=1;
 //	if(starttrace)
-//	DEBUG_PRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],RES,A,F,B,C,D,E,H,L,SP);
+//	LCS_DPRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],RES,A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
 	cpu->cycles-=lut_cycles[opcode];
 
@@ -603,7 +603,7 @@ void loadCoreMem(char *file)
 	
     }
     else { //ERROR
-	DEBUG_PRINT("Cannot read bin file \n");
+	LCS_DPRINT("Cannot read bin file \n");
     }
 
 }
