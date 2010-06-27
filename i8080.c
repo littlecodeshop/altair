@@ -10,7 +10,7 @@
 
 #include "i8080.h"
 
-static I8080_CPU cpu;
+I8080_CPU *cpu;
 
 int starttrace=0;
 
@@ -112,25 +112,25 @@ static const char* lut_mnemonic[0x100]={
 #endif
 
 
-#define A               cpu.reg.a
-#define F               cpu.reg.flags
-#define B               cpu.reg.b
-#define C               cpu.reg.c
-#define D               cpu.reg.d
-#define E               cpu.reg.e
-#define H               cpu.reg.h
-#define L               cpu.reg.l
-#define PC              cpu.reg.pc
-#define PCL             cpu.reg.pc_low
-#define PCH             cpu.reg.pc_high
-#define SP              cpu.reg.sp
-#define SPL             cpu.reg.sp_low
-#define SPH             cpu.reg.sp_high
-#define PSW             cpu.reg.psw
-#define BC              cpu.reg.bc
-#define DE              cpu.reg.de
-#define HL              cpu.reg.hl
-#define RES             cpu.result
+#define A               cpu->reg.a
+#define F               cpu->reg.flags
+#define B               cpu->reg.b
+#define C               cpu->reg.c
+#define D               cpu->reg.d
+#define E               cpu->reg.e
+#define H               cpu->reg.h
+#define L               cpu->reg.l
+#define PC              cpu->reg.pc
+#define PCL             cpu->reg.pc_low
+#define PCH             cpu->reg.pc_high
+#define SP              cpu->reg.sp
+#define SPL             cpu->reg.sp_low
+#define SPH             cpu->reg.sp_high
+#define PSW             cpu->reg.psw
+#define BC              cpu->reg.bc
+#define DE              cpu->reg.de
+#define HL              cpu->reg.hl
+#define RES             cpu->result
 
 #define ISNOTZERO()     ((RES&0xff)!=0)
 #define ISZERO()        ((RES&0xff)==0)
@@ -148,14 +148,14 @@ static const char* lut_mnemonic[0x100]={
 #define POP16()         R16(SP); SP+=2
 #define JUMP()          PC=R16(PC)
 #define CALL()          PUSH16(PC+2); JUMP()
-#define CCON()          cpu.cycles-=6; CALL()
+#define CCON()          cpu->cycles-=6; CALL()
 #define RET()           PC=POP16()
-#define RCON()          cpu.cycles-=6; RET()
+#define RCON()          cpu->cycles-=6; RET()
 #define RST(x)          PUSH16(PC); PC=(x)<<3
 #define FSZP(r)         RES=(RES&0x100)|r
 #define INR(r)          r++; FSZP(r)
 #define DCR(r)          r--; FSZP(r)
-#define FAUX()          cpu.a=(A&0xf)>(RES&0xf)
+#define FAUX()          cpu->a=(A&0xf)>(RES&0xf)
 #define ADD(r)          RES=A+r; FAUX(); A=RES&0xff
 #define ADC(r)          RES=(RES>>8&1)+A+r; FAUX(); A=RES&0xff
 #define DAD(r)          RES=(RES&0xff)|((r+HL)>>8&0x100); HL+=r
@@ -236,12 +236,12 @@ static void out_port(unsigned char port,unsigned char v)
 static void interrupt(int i)
 {
     DEBUG_PRINT("INTERUPTION\n");
-    if (cpu.i) {
-	cpu.i=cpu.ipend=0;
-	cpu.cycles-=11;
+    if (cpu->i) {
+	cpu->i=cpu->ipend=0;
+	cpu->cycles-=11;
 	RST(i);
     }
-    else cpu.ipend=0x80|i;
+    else cpu->ipend=0x80|i;
 }
 
 /* RUN CPU OPCODES */
@@ -249,14 +249,14 @@ static void cpu_run(int cycles)
 {
     int opcode;
 
-    cpu.cycles+=cycles;
+    cpu->cycles+=cycles;
 
-    while (cpu.cycles>0) {
-//if(cpu.reg.pc == 0x0C07) starttrace=1;
+    while (cpu->cycles>0) {
+//if(cpu->reg.pc == 0x0C07) starttrace=1;
 //	if(starttrace)
 //	DEBUG_PRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[mem[PC]],mem[PC],RES,A,F,B,C,D,E,H,L,SP);
 	opcode=R8(PC); PC++;
-	cpu.cycles-=lut_cycles[opcode];
+	cpu->cycles-=lut_cycles[opcode];
 
 	switch (opcode) {
 	    /* MOVE, LOAD, AND STORE */
@@ -361,12 +361,12 @@ static void cpu_run(int cycles)
 	    case 0xc5: PUSH16(BC); break;                   /* push b */
 	    case 0xd5: PUSH16(DE); break;                   /* push d */
 	    case 0xe5: PUSH16(HL); break;                   /* push h */
-	    case 0xf5: F=(RES>>8&1)|2|lut_parity[RES&0xff]|(cpu.a<<4)|(((RES&0xff)==0)<<6)|(RES&0x80); PUSH16(PSW); break;  /* push psw */
+	    case 0xf5: F=(RES>>8&1)|2|lut_parity[RES&0xff]|(cpu->a<<4)|(((RES&0xff)==0)<<6)|(RES&0x80); PUSH16(PSW); break;  /* push psw */
 
 	    case 0xc1: BC=POP16(); break;                   /* pop b */
 	    case 0xd1: DE=POP16(); break;                   /* pop d */
 	    case 0xe1: HL=POP16(); break;                   /* pop h */
-	    case 0xf1: PSW=POP16(); RES=(F<<8&0x100)|(lut_parity[F&0x80]!=(F&4))|(F&0x80)|((F&0x40)?0:6); cpu.a=F>>4&1; break;      /* pop psw */
+	    case 0xf1: PSW=POP16(); RES=(F<<8&0x100)|(lut_parity[F&0x80]!=(F&4))|(F&0x80)|((F&0x40)?0:6); cpu->a=F>>4&1; break;      /* pop psw */
 
 	    case 0xe3: L^=R8(SP); W8(SP,R8(SP)^L); L^=R8(SP); H^=R8(SP+1); W8(SP+1,R8(SP+1)^H); H^=R8(SP+1); break; /* xthl */
 
@@ -562,10 +562,10 @@ static void cpu_run(int cycles)
 	    case 0x3f: RES^=0x100; break;                   /* cmc */
 
 	    case 0x27: {                                    /* daa */
-			   int c=RES,a=cpu.a;
-			   if (cpu.a||((A&0xf)>9)) { ADD(6); } if (cpu.a) a=cpu.a;
+			   int c=RES,a=cpu->a;
+			   if (cpu->a||((A&0xf)>9)) { ADD(6); } if (cpu->a) a=cpu->a;
 			   if ((RES&0x100)||((A&0xf0)>0x90)) { ADD(0x60); } if (RES&0x100) c=RES;
-			   RES=(RES&0xff)|(c&0x100); cpu.a=a;
+			   RES=(RES&0xff)|(c&0x100); cpu->a=a;
 			   break;
 		       }
 
@@ -576,10 +576,10 @@ static void cpu_run(int cycles)
 
 
 		       /* CONTROL */
-	    case 0xf3: cpu.i=0; break;                      /* di */
-	    case 0xfb: cpu.i=1; if (cpu.ipend&0x80) interrupt(cpu.ipend&0x7f); break;       /* ei */
+	    case 0xf3: cpu->i=0; break;                      /* di */
+	    case 0xfb: cpu->i=1; if (cpu->ipend&0x80) interrupt(cpu->ipend&0x7f); break;       /* ei */
 	    case 0x00: break;                               /* nop */
-	    case 0x76: cpu.cycles=0; break;                 /* hlt (mov M,M) */
+	    case 0x76: cpu->cycles=0; break;                 /* hlt (mov M,M) */
 
 	    default: break;
 	}
@@ -698,6 +698,7 @@ void initCPU(unsigned char * memptr){
 
 int main(int argc, char** argv){
 
+cpu = malloc(sizeof(I8080_CPU));
 unsigned char * amem = malloc(0XFFFF);
 initCPU(amem);
     //put this parity thing somewhere else or at least understand it !
