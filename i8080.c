@@ -25,7 +25,7 @@ int starttrace=0;
 #endif
 
 /* The memory of the venerable MITS Altair 8800 */
-unsigned char mem[0xFFFF];
+unsigned char *mem;
 
 /* Bit manipulation and parity tables */
 #define BIT(n)                  ( 1<<(n) )
@@ -711,9 +711,14 @@ void keyboard(unsigned char key, int x, int y) {
     }
 }
 
+void initCPU(unsigned char * memptr){
+    mem = memptr; //we set the memory for access
+}
 
 int main(int argc, char** argv){
 
+unsigned char * amem = malloc(0XFFFF);
+initCPU(amem);
     //put this parity thing somewhere else or at least understand it !
     int i;
     for (i=0;i<0x100;i++) lut_parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));

@@ -21,3 +21,5 @@ typedef struct {
     unsigned char ipend;                            /* pending int */
     unsigned char a;                                /* aux carry bit */
 } I8080_CPU;
+
+void initCPU(unsigned char * memptr);
