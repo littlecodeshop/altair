@@ -1,0 +1,2 @@
+i8080.o: i8080.c i8080.h
+main.o: main.c i8080.h
