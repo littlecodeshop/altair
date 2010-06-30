@@ -3,10 +3,6 @@
 
 //OpenGL includes
 
-#include <OpenGL/gl.h>
-#include <OpenGL/glu.h>
-#include <GLUT/glut.h>
-
 
 #include "i8080.h"
 
