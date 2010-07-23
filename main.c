@@ -10,6 +10,7 @@
 
 
 #include "i8080.h"
+#include "font.h"
 
 /* Bit manipulation and parity tables */
 #define BIT(n)                  ( 1<<(n) )
@@ -52,9 +53,8 @@ unsigned char ParityTable256[256] =
 #define RxStat_BIT	0x01	// Ready to receive
 #define TxStat_BIT	0x02	// Ready to transmit
 
-static unsigned char key=0;
-unsigned char buffer[3];
-int bcount = 0;
+extern unsigned char buffer[3];
+extern int bcount ;
 
 static unsigned char in_port(unsigned char port)
 {
@@ -101,15 +101,19 @@ static unsigned char in_port(unsigned char port)
     return ret;
 }
 
+
 static void out_port(unsigned char port,unsigned char v)
 {
+    unsigned char ascii;
     switch (port) {
 
 	case 0x1:
 	case 0x11:
 	    //LCS_DPRINT("%c<-- OUT port %X\n",v&0x7F,port);
-	    printf("%c",v&0x7F);
-	    fflush(stdout);
+	    ascii = v&0x7F;
+	    console_output(ascii);
+	  //  printf("%c",v&0x7F);
+	  //  fflush(stdout);
 	    break;
 	default: 
 	    //   LCS_DPRINT("%c<-- OUT port %X\n",v,port);
@@ -152,64 +156,8 @@ void emuRun(void){
     cpu_run(icpu,1000);
 }
 
-void init(void) 
-{
-    glClearColor (0.0, 0.0, 0.0, 0.0);
-    glClearDepth(1.0);
-    glShadeModel (GL_SMOOTH);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_LIGHT0);
-}
-void drawAxis()
-{
-    glPushMatrix();
-    // Je veux pas de lightning ici
-    glDisable(GL_LIGHTING);
-    //I draw 2 axis
-    glColor3f(1.0,0.0,0.0);
-    glBegin(GL_LINES);
-
-    glColor3f(1.0, 0.0, 0.0);                  /* red */ 
-    glVertex3f(-5.0,0.0,0.0);
-    glVertex3f(5.0,0.0,0.0);
-
-    glColor3f(0.0, 1.0, 0.0);                  /* Green */ 
-    glVertex3f(0.0,-5.0,0.0);
-    glVertex3f(0.0,5.0,0.0);
-
-    glColor3f(0.0, 0.0, 1.0);                  /* Blue */ 
-    glVertex3f(0.0,0.0,-5.0);
-    glVertex3f(0.0,0.0,5.0);
-
-    glEnd();
-    glEnable(GL_LIGHTING);
-    glPopMatrix();     
-
-}
-void display(void)
-{
-
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-    glLoadIdentity();
-
-    drawAxis();
 
 
-    glutSwapBuffers();
-
-
-}
-void reshape(int w, int h)
-{
-    glViewport (0, 0, (GLsizei) w, (GLsizei) h);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(-5.0, 5.0, -5.0, 5.0, -5.0, 5.0);
-    //glFrustum (-5.0, 5.0, -5.0, 5.0, 2.0, 10.0);
-
-    glMatrixMode(GL_MODELVIEW);
-    //glLoadIdentity();
-}
 void mouse(int button, int state, int x, int y) {
     switch (button) {
 	case GLUT_LEFT_BUTTON:
@@ -244,15 +192,15 @@ int main(int argc, char** argv){
     loadCoreMem( icpu, "4kbas.bin" );
     glutInit(&argc, argv);
     //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
-    glutInitDisplayMode (GLUT_DOUBLE | GLUT_RGBA|GLUT_DEPTH);
+    glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);
     glutInitWindowSize (250, 250); 
     glutInitWindowPosition (100, 100);
     glutCreateWindow (argv[0]);
     init ();
-    glutDisplayFunc(display); 
+    glutDisplayFunc(console_display); 
     glutReshapeFunc(reshape); 
     glutMouseFunc(mouse);
-    glutKeyboardFunc(keyboard);
+    glutKeyboardFunc(console_keyboard);
     glutIdleFunc(emuRun);
     glutMainLoop();
     return 0;

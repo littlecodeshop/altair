@@ -22,8 +22,8 @@ LDFLAGS = -lm -lpng -framework opengl -framework glut
 # In this section, you list the files that are part of the project.
 # If you add/change names of header/source files, here is where you
 # edit the Makefile.
-HEADERS = i8080.h 
-SOURCES = i8080.c main.c 
+HEADERS = i8080.h font.h 
+SOURCES = font.c i8080.c main.c 
 OBJECTS = $(SOURCES:.c=.o)
 TARGET = altair
 
