@@ -2251,13 +2251,15 @@ void console_keyboard(unsigned char key, int x, int y)
 void console_output(unsigned char ascii)
 {
     switch(ascii){
-	case 13:
-	    cursy++;
+	case 10:
 	    cursx=0;
+	    break;
+	case 13:
+	    cursy=(cursy+1)%23;
 	    break;
 	default:
 	    screenBuffer[cursy][cursx]=ascii;
-	    cursx++;
+	    cursx=(cursx+1)%79;
 	    break;
     }
     
