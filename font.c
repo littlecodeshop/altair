@@ -2250,12 +2250,15 @@ void console_keyboard(unsigned char key, int x, int y)
 
 void console_output(unsigned char ascii)
 {
+    int i;
     switch(ascii){
 	case 10:
 	    cursx=0;
 	    break;
 	case 13:
 	    cursy=(cursy+1)%23;
+	   for(i=0;i<80;i++)  
+	       screenBuffer[cursy][i]=0;
 	    break;
 	default:
 	    screenBuffer[cursy][cursx]=ascii;
