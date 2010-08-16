@@ -11,9 +11,9 @@ int starttrace=0;
 
 
 /** This is a table used to display numbers as binary ********/
-char *bintable[16] = {"0000", "0001", "0010", "0011", "0100", "0101", "0110", "0111", "1000", "1001", "1010", "1011", "1100", "1101", "1110" , "1111"};
-void displayBin(unsigned char data){
-    LCS_DPRINT("%s%s", bintable[data / 0xF], bintable[data & 0xF]);
+char *bintab[16] = {"0000", "0001", "0010", "0011", "0100", "0101", "0110", "0111", "1000", "1001", "1010", "1011", "1100", "1101", "1110" , "1111"};
+void displayBinary(unsigned char data){
+    LCS_DPRINT("%s%s", bintab[data / 0xF], bintab[data & 0xF]);
 }
 
 
@@ -126,18 +126,21 @@ void cpu_run( I8080_CPU * cpu, int cycles)
 
 
     int opcode;
+    unsigned char endrot;
 
     cpu->cycles+=cycles;
 
     while (cpu->cycles>0) {
-	if(cpu->reg.pc == 0x080A) starttrace=1;
-		if(starttrace){
-		LCS_DPRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X\n",PC,lut_mnemonic[cpu->mem[PC]],cpu->mem[PC],RES,A,F,B,C,D,E,H,L,SP);
-		LCS_DPRINT("SZ0A0P1C\n");
-		displayBin(cpu->reg.flags);
-		LCS_DPRINT("\n");
-		if(cpu->reg.pc==0x036E) starttrace=0;
-		}
+	/*
+	   if(cpu->reg.pc == 0x080A) starttrace=1;
+	   if(starttrace){
+	   LCS_DPRINT("%04x:%10s @pc:%02X RES:%04X a:%02X f:%02X b:%02X c:%02X d:%02X e:%02X h:%02X l:%02X sp:%04X (hl):%02X \n",PC,lut_mnemonic[cpu->mem[PC]],cpu->mem[PC],RES,A,F,B,C,D,E,H,L,SP,cpu->mem[HL]);
+	   LCS_DPRINT("SZ0A0P1C\n");
+	   displayBinary(cpu->reg.flags);
+	   LCS_DPRINT("\n");
+	   if(cpu->reg.pc==0x036E) starttrace=0;
+	   }
+	   */
 	opcode=R8(PC); PC++;
 	cpu->cycles-=lut_cycles[opcode];
 
@@ -433,8 +436,8 @@ void cpu_run( I8080_CPU * cpu, int cycles)
 
 
 		       /* ROTATE */
-	    case 0x07: RES=(RES&0xff)|(A<<1&0x100); A<<=1; break;   /* rlc */
-	    case 0x0f: RES=(RES&0xff)|(A<<8&0x100); A>>=1; break;   /* rrc */
+	    case 0x07: RES=(RES&0xff)|(A<<1&0x100); A<<=1;A=(RES&0x100)>0?A|0x01:A; break;   /* rlc */
+	    case 0x0f: RES=(RES&0xff)|(A<<8&0x100); A>>=1;A=(RES&0x100)>0?A|0x80:A; break;   /* rrc */
 	    case 0x17: { int c=A<<1&0x100; A=A<<1|(RES>>8&1); RES=(RES&0xff)|c; break; }    /* ral */
 	    case 0x1f: { int c=A<<8&0x100; A=A>>1|(RES>>1&0x80); RES=(RES&0xff)|c; break; } /* rar */
 
@@ -481,7 +484,8 @@ void initCPU(I8080_CPU * cpu){
     int i;
     for (i=0;i<0x100;i++) parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));
     //start the CPU with 0 PC
-    PC = 0x0;
+    PC = 0x0000; //TODO mettre 0xFF00 ici pour charger la ROM disk
+    SP=0xF000;
 }
 
 
