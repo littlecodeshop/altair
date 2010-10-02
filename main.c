@@ -22,13 +22,13 @@
 
 
 
-/*
+/***************************************************
    Set bits        Clear bits      Flip bits
    y        0x0011          0x0011          0x0011
    mask     0x0101 |        0x0101 &~       0x0101 ^
    ---------       ----------      ---------
    result   0x0111          0x0010          0x0110
-   */
+***************************************************/
 
 ////////////////////////////////////////////////////////////////////////////////
 //    Examples:
@@ -189,7 +189,7 @@ int main(int argc, char** argv){
     icpu->in_port_ptr = in_port;
     icpu->mem = amem;
 
-    loadCoreMem( icpu, "4kbas.bin" );
+    loadCoreMem( icpu, "exbas40.bin" );
     glutInit(&argc, argv);
     //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
     glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);

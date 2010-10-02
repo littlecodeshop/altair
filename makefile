@@ -17,7 +17,7 @@ CFLAGS = -I /usr/local/include/ -g
 
 # The LDFLAGS variable sets flags for linker
 #  -lm   says to link in libm (the math library)
-LDFLAGS = -lm -lpng -framework opengl -framework glut
+LDFLAGS = -lm -framework opengl -framework glut
 
 # In this section, you list the files that are part of the project.
 # If you add/change names of header/source files, here is where you
