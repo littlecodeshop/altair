@@ -4,10 +4,15 @@
 #include <stdio.h>
 //OpenGL includes
 
+#ifdef WINDOWS
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
+#else
 #include <OpenGL/gl.h>
 #include <OpenGL/glu.h>
 #include <GLUT/glut.h>
-
+#endif
 #include "font.h"
 
 int cursx, cursy; //position of the cursor
