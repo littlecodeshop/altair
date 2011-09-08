@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//OpenGL includes
 
 
 #include "i8080.h"

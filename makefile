@@ -6,7 +6,7 @@
 
 # It is likely that default C compiler is already gcc, but explicitly
 # set, just to be sure
-CC = gcc
+CC = clang
 
 # The CFLAGS variable sets compile flags for gcc:
 #  -g        compile with debug information
