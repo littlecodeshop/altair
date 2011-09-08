@@ -106,7 +106,6 @@ static unsigned char in_port(unsigned char port)
     return ret;
 }
 
-
 static void out_port(unsigned char port,unsigned char v)
 {
     unsigned char ascii;
@@ -157,13 +156,13 @@ void loadCoreMem(I8080_CPU * cpu,char *file)
 
 }
 
-void emuRun(void){
+void emuRun(void)
+{
     cpu_run(icpu,1000);
 }
 
-
-
-void mouse(int button, int state, int x, int y) {
+void mouse(int button, int state, int x, int y) 
+{
     switch (button) {
 	case GLUT_LEFT_BUTTON:
 	    break;
@@ -174,7 +173,8 @@ void mouse(int button, int state, int x, int y) {
     }
 }
 
-    void keyboard(unsigned char key, int x, int y) {
+void keyboard(unsigned char key, int x, int y) 
+{
 	if (key == 27) 
 	    exit(0);
 	else
@@ -182,10 +182,10 @@ void mouse(int button, int state, int x, int y) {
 	    buffer[0] = key;
 	    bcount=1;
 	}
-    }
+}
 
-
-int main(int argc, char** argv){
+int main(int argc, char** argv)
+{
 
     icpu = malloc(sizeof(I8080_CPU));
     unsigned char * amem = malloc(0XFFFF);
