@@ -1,3 +1,20 @@
+/*
+ * =====================================================================================
+ *
+ *       Filename: main 
+ *
+ *    Description: Altair 8800 emulator
+ *
+ *        Version:  1.0
+ *        Created:  0
+ *       Revision:  none
+ *       Compiler:  gcc
+ *
+ *         Author:  Richard Ribier (Coder), 
+ *        Company:  LittleCodeShop
+ *
+ * =====================================================================================
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +33,7 @@
 
 #include "i8080.h"
 #include "font.h"
+#include "serial.h"
 
 /* Bit manipulation and parity tables */
 #define BIT(n)                  ( 1<<(n) )
@@ -65,11 +83,10 @@ static unsigned char in_port(unsigned char port)
 {
     unsigned char ret=port;
 
-    //LCS_DPRINT("--> IN port %X\n",port);
     switch (port) {
-	case 0x00:
+	case ASR33_CTRL_PORT:
 	    break;
-	case 0x10:    
+	case ADM3A_CTRL_PORT:    
 	    ret = TxStat_BIT;
 	    /*if(_kbhit()){
 	    //check if it is a control caracter for DSK
@@ -78,15 +95,15 @@ static unsigned char in_port(unsigned char port)
 	    bcount = 1;
 	    }*/
 	    if(bcount)
-		ret = ret|RxStat_BIT;
+            ret = ret|RxStat_BIT;
 	    break;
-	case 0x01:
+	case ASR33_DATA_PORT:
 	    if(bcount>0){
 		ret = buffer[0];
 		bcount = 0;
 	    }
 	    break;
-	case 0x11:    
+	case ADM3A_DATA_PORT:    
 	    {
 		unsigned char b = buffer[0];
 		unsigned char parity = ParityTable256[b];
