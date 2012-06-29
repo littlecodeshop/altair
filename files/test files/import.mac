@@ -1,0 +1,713 @@
+; import.mac
+; ~~~~~~~~~~
+;
+; Contents:
+;	Z80 assembler program for CP/M.
+;
+; Purpose:
+;	Import a file from unix into the xtrs emulator.
+;
+; Usage:
+;	import [-n] [unixfilename [cpmfilename]]
+;
+; Parameters:
+;	-n converts unix lf to CP/M cr lf;
+;	unixfilename - name of the unix file to import; and
+;	cpmfilename - name of the file in CP/M (must not exist);
+;
+; Notes:
+;	When started with no arguments, import will prompt for all args.
+;	If only the unixfilename is specified, the cpmfilename will be 
+;	assumed to have the same name.
+;
+;	Also note that the CP/M CCP converts all command line arguments to
+;	upper case, therefore if unixfilename is specified on the command
+;	line then it will be taken as all upper case.
+;
+; Amendment History:
+;	11MAR98	 RKG  Work started.
+;	15MAR98	 RKG  Initial release.
+;	10OCT98	 RKG  Clean up code.
+;       02NOV98  RKG  Fix bug in "copen" which was triggered when attempting
+;                     to import to an existing CP/M file.
+;
+*eject
+;==============================================================================
+; ascii characters
+;==============================================================================
+
+nul		equ	00h
+tab		equ	09h
+lf		equ	0Ah
+cr		equ	0Dh
+sub		equ	1Ah
+blank		equ	20h
+
+;==============================================================================
+; cp/m stuff
+;==============================================================================
+
+				; system addresses
+c_boot		equ	0000h		; warm start
+c_bdos		equ	0005h		; bdos entry
+c_fcb1		equ	005Ch		; first file control block
+c_fcb2		equ	006Ch		; second file control block
+	; note c_fcb2 is overwritten if c_fcb1 is used
+c_iobuf		equ	0080h		; default i/o buffer
+c_iobufsize	equ	80h		; i/o buffer size
+c_cmdlen	equ	0080h		; length of command arguments 
+c_cmdstr	equ	0081h		; start of command arguments
+
+				; bdos call macro
+bdos		macro svc,param
+	ifnb <param>
+		ld de,param
+	endif
+		ld c,svc
+		call c_bdos
+		endm
+
+				; bdos services
+b_coutb		equ	02h		; console output bute
+b_couts		equ	09h		; console output string
+b_cins		equ	0Ah		; console input line
+b_fnew		equ	16h		; make new file
+b_fopen		equ	0Fh		; open existing file
+b_fclose	equ	10h		; close output file
+b_frseq		equ	14h		; sequential read
+b_fwseq		equ	15h		; sequential write
+
+;==============================================================================
+; xtrs emulator stuff
+;==============================================================================
+
+				; traps (byte reversed for defw)
+emt_open	equ	30EDh		; open unix file
+emt_close	equ	31EDh		; close unix file
+emt_read	equ	32EDh		; read unix file
+emt_write	equ	33EDh		; write unix file
+emt_strerror	equ	35EDh		; unix error string
+
+				; open unix file flags
+eo_rdonly	equ	00h
+eo_wronly	equ	01h
+eo_creat	equ	0100q
+eo_trunc	equ	01000q
+*eject
+;==============================================================================
+; messages
+;==============================================================================
+
+m_nl:		defb	cr,lf,'$'
+
+m_usage:	defb	cr,lf,'Usage:',tab
+		defb	'import [[-n] unixfn [cpmfn]]',cr,lf,'$'
+m_complete:	defb	cr,lf,'import complete',cr,lf,'$'
+
+m_f_prompt:	defb	'Convert lf to cr lf.........: $'
+m_f_invalid:	defb	'Invalid flag',cr,lf,'$'
+
+m_u_prompt:	defb	'UNIX filename...............: $'
+m_u_open:	defb	'Unable to open UNIX file: ','$'
+m_u_read:	defb	'Unable to read UNIX file: ','$'
+m_u_close:	defb	'Unable to close UNIX file: ','$'
+m_u_unkerr:	defb	'Unknown UNIX error',cr,lf,'$'
+
+m_c_prompt:	defb	'CP/M filename...............: $'
+m_c_exists:	defb	'CP/M file already exists',cr,lf,'$'
+m_c_open:	defb	'Unable to open CP/M file',cr,lf,'$'
+m_c_write:	defb	'Unable to write CP/M file',cr,lf,'$'
+m_c_close:	defb	'Unable to close CP/M file',cr,lf,'$'
+
+;==============================================================================
+; storage
+;==============================================================================
+
+				; buffer to hold the unix file descriptor
+unixfd:		defw	0000h
+
+				; space for the stack
+		defs	32
+stack_top	equ	$		; stack grows down from here
+*eject
+import:
+;==============================================================================
+; import [[-n] unixfn [cpmfn]]
+;==============================================================================
+
+		ld sp,stack_top		; set up the stack
+
+				; check for command line arguments
+		ld hl,c_cmdstr		; start of command args
+		call skipblanks
+
+				; parse or prompt?
+		jr nz,import1		; cmd line arguments
+		call prompt		; prompt for arguments
+		jr import2
+import1:	call parse		; parse command line arguments
+
+import2:			; binary or ascii?
+		jr z,import3		; ascii import
+		call binary		; binary import
+		jr import4
+import3:	call ascii
+
+import4:			; export complete
+		jr nz,end		; import was bad
+		call uclose		; close unix file
+		call cclose		; close cp/m file
+		bdos b_couts,m_complete
+
+end:		jp c_boot		; all done
+
+usage:
+;==============================================================================
+; display program usage
+;	exit:	does not return
+;==============================================================================
+
+		bdos b_couts,m_usage
+		jr end			; that's all folks
+*eject
+parse:
+;==============================================================================
+; parse the command line arguments and open both the unix and cp/m files
+;	entry:	(hl) start of command line args
+;		a contains first character of arguments (from skipblanks)
+;	exit:	z flag indicates ascii import (i.e. conversion)
+;		(c_fcb1) contains the cp/m fcb
+;		(unixfd) contains the unix file descriptor
+;		all registers trashed
+;==============================================================================
+
+				; conversion flag
+		cp '-'			; check first character
+		jr nz,parse3		; no '-'
+		inc hl
+		ld a,(hl)		; check second character
+		cp 'N'
+		jr z,parse2		; "-N"
+
+parse1:					; bad flag
+		bdos b_couts,m_f_invalid
+		jp usage
+parse2:		inc hl
+		ld a,(hl)		; check third character
+		cp ' '
+		jp nz,parse1		; no space after "-N"
+		xor a			; zero (i.e. ascii import)
+parse3:		or a			; set flags
+		push af			; save conversion flag
+
+				; unix filename
+		call skipblanks
+		jp z,usage		; no unix filename
+		push hl			; save start of unix filename
+parse4:		inc hl			; find end
+		ld a,(hl)
+		cp nul			; end of args?
+		jr z,parse5
+		cp blank		
+		jr nz,parse4
+		ld (hl),nul		; terminate unix filename
+		inc hl
+parse5:		ex (sp),hl		; save place and get start of fn
+		push hl			; save start address
+		call uopen		; open unix filename
+		pop bc			; restore start of unix filename
+		jp nz,usage
+		pop hl			; retore place in cmd line
+
+				; cpm filename
+		call skipblanks
+		jr nz,parse6
+		push bc			; start of unix filename
+		pop hl			; use the same name
+parse6:		call cfillfcb		
+		call copen
+		jp nz,usage
+
+		pop af			; conversion flag
+		ret
+*eject
+prompt:
+;==============================================================================
+; prompt for arguments
+;	exit:	z flag indicates ascii import (i.e. conversion)
+;		(c_fcb1) contains the cp/m fcb
+;		(unixfd) contains the unix file descriptor
+;		all registers trashed
+;==============================================================================
+
+				; conversion flag
+		ld a,blank		; default answer
+		ld (c_iobuf+2),a
+prompt1:	bdos b_couts,m_f_prompt
+		ld de,c_iobuf		; storage buffer
+		ld a,4			; max chars to read
+		ld (de),a
+		bdos b_cins
+		bdos b_couts,m_nl
+		ld a,(c_iobuf+2)	; first char of answer
+		call upcase
+		cp 'N'
+		jr z,prompt2
+		cp 'Y'
+		jr nz,prompt1		; ask again
+		xor a			; zero
+prompt2:	or a			; set flags
+		push af			; save conversion flag
+
+prompt3:			; unix filename
+		bdos b_couts,m_u_prompt
+		ld de,c_iobuf		; storage buffer
+		ld a,70			; max number of characters to read
+		ld (de),a
+		bdos b_cins
+		bdos b_couts,m_nl
+		ld hl,c_iobuf+1		; point to length
+		call termstring
+		call skipblanks
+		call uopen
+		jr nz,prompt3		; ask again
+
+prompt4:			; cpm filename
+		bdos b_couts,m_c_prompt
+		ld de,c_iobuf		; storage buffer
+		ld a,15			; max chars to read
+		ld (de),a
+		bdos b_cins
+		bdos b_couts,m_nl
+		ld hl,c_iobuf+1
+		call termstring
+		call skipblanks
+		jr z,prompt4		; no filename
+		call cfillfcb
+		call copen
+		call nz,prompt4		; ask again
+
+		pop af			; conversion flag
+		ret
+* eject
+;==============================================================================
+; unix file routines
+;==============================================================================
+
+uopen:
+;------------------------------------------------------------------------------
+; open unix file
+;	entry:	(hl) start of unix filename
+;	exit:	z indicates successful open
+;		(unixfd) contains unix file descriptor
+;		af,bc,de trashed.
+;------------------------------------------------------------------------------
+
+		ld bc,eo_rdonly
+		ld de,0
+		defw emt_open
+		ld (unixfd),de		; save unix fd
+		ret z			; ok
+		push af			; save error number
+		bdos b_couts,m_u_open
+		pop af			; restore error number
+		jr uerror
+
+uread:
+;------------------------------------------------------------------------------
+; read a block from the unix file
+;	entry:	(hl) start of buffer (c_iobufsize length)
+;		(unixfd) contains unix file descriptor
+;	exit:	z indicates sucessful read
+;		b contains number of bytes read
+;		af trashed (c,de,hl saved)
+;------------------------------------------------------------------------------
+
+		push hl
+		push de
+		push bc
+		ld bc,c_iobufsize	; length
+		ld de,(unixfd)		; get unix fd
+		defw emt_read	
+			; bytes read in bc but since iobufsize is only 0x80h
+			; bytes, the c register will contains the full count
+
+				; show action
+		push bc
+		ld e,'u'
+		bdos b_coutb
+		pop bc
+
+		ld d,c			; save count
+		pop bc			; recover contents of bc
+		ld b,d			; count now in b
+		pop de			; recover contents of de
+		pop hl			; recover contents of hl
+		ret z
+
+		push af			; save error number
+		bdos b_couts,m_u_read
+		pop af			; restore error number
+		jr uerror
+
+uclose:
+;------------------------------------------------------------------------------
+; close the unix file
+;	entry:	(unixfd) contains unix file descriptor
+;	exit:	z indicates a sucessful close
+;		all registers trashed
+;------------------------------------------------------------------------------
+
+		ld de,(unixfd)		; get unix fd
+		defw emt_close
+		ret z			; ok
+		push af			; save error number
+		bdos b_couts,m_u_close
+		pop af			; restore error number
+		jr uerror
+
+uerror:
+;------------------------------------------------------------------------------
+; display the error message for a unix errno
+;	entry:	a contains the error no
+;	exit:	all registers trashed
+;		a is non-zero (indicating an error)
+;------------------------------------------------------------------------------
+
+		ld de,c_iobuf		; buffer to store msg
+		push de
+		pop hl			; ld hl,de
+		ld bc,c_iobufsize
+		defw emt_strerror
+		jp nz,uerror1		; another error?!
+		add hl,bc
+		ld (hl),lf		; add lf
+		inc hl
+		ld (hl),'$'		; add terminator
+		bdos b_couts,c_iobuf
+		jp retnz
+uerror1:	bdos b_couts,m_u_unkerr
+		jp retnz
+*eject
+;==============================================================================
+; cp/m file routines
+;==============================================================================
+
+cfillfcb:
+;------------------------------------------------------------------------------
+; fill fcb1 with a cp/m fileref
+;	entry:	(hl) start of cp/m fileref
+;	exit:	(hl) first char after cp/m filename
+;		(c_fcb1) contains the cp/m fcb
+;		af,b,de trashed
+;------------------------------------------------------------------------------
+
+		ld de,c_fcb1		; fcb to fill
+
+				; drive code (optional)
+		inc hl			; test 2nd character
+		ld a,(hl)
+		cp ':'			; a ':' indicates a drive code
+		dec hl			; back to the start
+		jr z,cfillfcb1		; found a ':', must be a drive code
+
+				; no drive code
+		ld a,0			; zero indicates current drive
+		ld (de),a
+		jr cfillfcb2
+
+cfillfcb1:			; a drive code
+		ld a,(hl)
+		call upcase		; convert to upper case
+		sub 'A'-1		; 'A' becomes 1
+		ld (de),a		; store drive code
+		inc hl			; skip over the ':'
+		inc hl
+
+cfillfcb2:			; filename
+		inc de
+		ld b,8
+		call cgetname		; 8 char filename
+		ld b,3
+		call cgetname		; 3 char extension
+		ret
+
+cgetname:
+;------------------------------------------------------------------------------
+; transribe bytes and pad with spaces until a nul, space, or a '.' found
+;	entry:	(hl) source
+;		(de) destination
+;		b bytes to transribe/pad
+;	exit:	(hl) next byte in source (nul or space), or byte after '.'
+;		(de) next byte in destination
+;		af trashed
+;------------------------------------------------------------------------------
+
+		ld a,(hl)		; get character
+		cp nul
+		jr z,cgetshort		; stop if nul
+		cp blank
+		jr z,cgetshort		; stop if blank
+		cp '.'
+		jr z,cgetshort		; stop if '.'
+		call upcase
+		ld (de),a		; store character
+		inc hl			; bump pointers
+		inc de
+		djnz cgetname
+
+cgetskip:			; ignore extra chars in source
+		ld a,(hl)
+		cp nul
+		ret z			; stop on nul
+		cp blank
+		ret z			; stop on blank
+		inc hl			; move to next character
+		cp '.'
+		ret z			; stop after '.'
+		jr cgetskip
+
+cgetshort:			; fill remainder of destination with blanks
+		ld a,blank
+cgetshort1:	ld (de),a
+		inc de
+		djnz cgetshort1
+		ld a,(hl)		; check last character copied
+		cp '.'
+		ret nz			; stop on non '.' character
+		inc hl
+		ret			; stop after '.' character
+
+copen:
+;------------------------------------------------------------------------------
+; open the cp/m filename in fcb1
+;	entry:	(c_fcb1) contains cp/m fcb
+;	exit:	z indicates a successful open
+;		af,bd,de,hl trashed
+;------------------------------------------------------------------------------
+
+		bdos b_fopen,c_fcb1	; open existing file (a=0ffh is error)
+		inc a
+		jr z,copen1		; file doesn't exist (good)
+		bdos b_fclose,c_fcb1    ; close the existing file
+		bdos b_couts,m_c_exists
+		jp retnz	
+copen1:		bdos b_fnew,c_fcb1	; make new file (a=0FFh is error)
+		inc a
+		jp z,copen2
+		xor a
+		ret
+copen2:		bdos b_couts,m_c_open
+		jp retnz
+		
+cwrite:
+;------------------------------------------------------------------------------
+; write a block to the cp/m file
+;	entry:	(c_fcb1) contains the cp/m fcb
+;	exit:	z indicates a successful write
+;		af trashed (bc,de,hl saved)
+;------------------------------------------------------------------------------
+
+		push bc
+		push de
+		push hl
+		bdos b_fwseq,c_fcb1
+
+				; show action
+		ld e,'c'
+		bdos b_coutb
+
+		pop hl
+		pop de
+		pop bc
+		ret z
+		bdos b_couts,m_c_write
+		jp retnz
+
+cclose:
+;------------------------------------------------------------------------------
+; close the cp/m filename in fcb1
+;	entry:	(c_fcb1) contains cp/m fcb
+;	exit:	z indicates a sucessful close
+;		all registers trashed
+;------------------------------------------------------------------------------
+
+		bdos b_fclose,c_fcb1
+		ret z
+		bdos b_couts,m_c_close
+		jp retnz
+*eject
+binary:		
+;==============================================================================
+; import a binary file
+;	exit:	z indicates a successful import
+;		all registers trashed
+;==============================================================================
+
+		ld hl,c_iobuf		; all io thru cp/m io buffer
+		call uread		; length in b
+		
+				; check for zero length read
+		ld a,b
+		or a			; set flags
+		ret z			; nothing to write, must be finished
+		push bc			; save length
+		cp c_iobufsize
+		jr z,binary2		; full block
+
+				; partial block - pad with nuls
+		ld c,b
+		ld b,0
+		add hl,bc		; point to garbage
+		ld a,c_iobufsize
+		sub b			; a has number bytes to nul
+binary1:	jr z,binary2
+		ld (hl),nul
+		inc hl
+		dec a
+		jr binary1
+
+				; write cpm block
+binary2:	call cwrite
+		pop bc			; restore length
+		ret nz
+
+				; check if file complete
+binary3:	ld a,b			; check length
+		cp c_iobufsize
+		jr z,binary		; full read, read more
+
+				; partial read must be last read, fall thru...
+		xor a			; set zero flag
+		ret
+*eject
+ascii:
+;==============================================================================
+; import an ascii file (convert lf to cr lf and add sub at end)
+;	during: (hl) unix buffer
+;		(de) cpm buffer
+;		b bytes remaining in unix buffer
+;		c bytes remaining in cp/m buffer
+;	exit:	z indicates a successful export
+;		all registers trashed
+;==============================================================================
+
+				; setup cpm buffer
+		ld de,c_iobuf
+		ld c,c_iobufsize
+
+				; read a block from unix file
+ascii1:		ld hl,unixbuf
+		call uread
+		ld a,b
+		or a
+		jr z,ascii4		; nothing was read
+
+				; scan thru all bytes in unix buffer
+ascii2:		ld a,(hl)
+		cp lf
+		jr nz,ascii3
+		ld a,cr
+		call asciiput
+		ld a,lf
+ascii3:		call asciiput
+		inc hl
+		djnz ascii2
+		jr ascii1
+
+ascii4:				; end of file reached
+		ld a,sub		; add a sub character
+		call asciiput
+		ld a,c
+		cp c_iobufsize
+		ret z			; cp/m buffer was already written
+
+				; fill cpm buffer with nul chars
+		ld b,c
+		ld a,nul
+ascii5:		ld (de),a
+		inc de
+		djnz ascii5
+		call cwrite		; write last cp/m buffer
+		ret
+
+				; put a character into the cp/m buffer
+asciiput:	ld (de),a
+		inc de			; bump pointer
+		dec c			; dec count
+		ld a,c
+		or a
+		ret nz			; buffer not full yet
+		call cwrite
+		ld de,c_iobuf		; reset pointer and counter
+		ld c,c_iobufsize
+		ret
+*eject
+;==============================================================================
+; misc routines
+;==============================================================================
+
+retnz:
+;------------------------------------------------------------------------------
+; load a with non-zero and sets flags
+;	exit:	a set to 1 and flags set
+;------------------------------------------------------------------------------
+
+		xor a
+		inc a
+		ret
+
+
+upcase:
+;------------------------------------------------------------------------------
+; convert character to upper case
+;	entry:	a is the character to convert
+;	exit:	a is now upper case
+;------------------------------------------------------------------------------
+
+		cp 'a'
+		ret c			; smaller than 'a'
+		cp 'z'+1
+		ret nc			; larger than 'z'
+		sub 'a'-'A'		; convert '[a-z]' to '[A-Z]'
+		ret
+
+
+skipblanks:
+;------------------------------------------------------------------------------
+; skip blanks at the front of a buffer
+;	entry:	(hl) start of buffer
+;	exit:	(hl) first non blank
+;		z flag set if a nul character was found
+;------------------------------------------------------------------------------
+
+		ld a,(hl)
+		cp nul
+		ret z			; found nul
+		cp blank
+		ret nz			; found non-space
+		inc hl
+		jr skipblanks
+
+
+termstring:
+;------------------------------------------------------------------------------
+; append a nul to the end of a bdos console input line buffer
+;	entry:	(hl) 1 byte length field followed by string
+;	exit:	(hl) first byte of string
+;		f,bc trashed
+;------------------------------------------------------------------------------
+
+		ld b,0
+		ld c,(hl)		; bc has length
+		inc hl			; point to first byte
+		push hl			; save start of response
+		add hl,bc
+		ld (hl),nul		; terminate input
+		pop hl			; restore start of response
+		ret
+
+
+unixbuf		equ $			; space for unix ascii buffer
+
+		end import

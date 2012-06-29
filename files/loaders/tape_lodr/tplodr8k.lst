@@ -1,0 +1,71 @@
+0001   0000             ; Altair 8800 BASIC 3.2 [8k Version]
+0002   0000             ; Cassette Boot Loader
+0003   0000             ; Written by Bill Gates and Paul Allen and Monte Davidoff
+0004   0000             ; 041 256 037       ; octal boot
+0005   0000             ; 061 022 000
+0006   0000             ; 333 006
+0007   0000             ; 017
+0008   0000             ; 330
+0009   0000             ; 333 007
+0010   0000             ; 275
+0011   0000             ; 310
+0012   0000             ; 055
+0013   0000             ; 167
+0014   0000             ; 300
+0015   0000             ; 351
+0016   0000             ; 003
+0017   0000             ; 000
+0018   0000             ;==========================================================
+0019   0000             ;Notes:
+0020   0000             ;The 8K cassette tape took 4.5 minutes to load and displayed the
+0021   0000             ;octal pattern 17647 for a good load and 17637 when it failed,
+0022   0000             ;which happened a lot.
+0023   0000             ;
+0024   0000             ;It would be fun to load the data in 4.5 minutes (slow mode) to
+0025   0000             ;emulate the actual frustration of the old machines. I could
+0026   0000             ;supply a wav file or mpg of the data for something to listen too
+0027   0000             ;as the coffee was being made.
+0028   0000             ;
+0029   0000             ;The loader was single stepped to IN, 7 (ACR data port), and the next click
+0030   0000             ;turned on the INP status LED and the data LEDs displayed noise until the pattern
+0031   0000             ;256 ($C2) showed steady, meaning the leader was being read and then RUN was
+0032   0000             ;toggled.  The address 17647 displayed after the 2nd loader was running. Then it
+0033   0000             ;was time to get a coffee.
+0034   0000             ;
+0035   0000             ;Port 255Q Sense Switch was set up for eventual terminal baud rates and such as
+0036   0000             ;you already have documented.
+0037   0000             ;==========================================================
+0038   0000             ; MITSlodr.asm
+0039   0000             ; THE BASIC TAPES HAVE A LEADER
+0040   0000             ; FOLLOWED BY A LOADER
+0041   0000             ; FOLLOWED BY RECORDS
+0042   0000             ; THIS "PRELOADER" READS IN THE TAPE LOADER
+0043   0000             ;
+0044   0000             ; Modifications (c) 2003 by Richard Cini
+0045   0000             ;    Assemble with "TASM -85 tplodr8k.asm"
+0046   0000             
+0047   0000             .ORG 0
+0048   0000             ; H=HIGH BYTE OF LOAD ADDRESS
+0049   0000             ; L=VALUE OF LEADER BYTE  !
+0050   0000             ; AND LENGTH OF LOADER    !!
+0051   0000             ; AND LOW BYTE OF ADDRESS !!!
+0052   0000             ;		LXI  H,00FAEH   ;4KBAS32.tap
+0053   0000 21 C2 1F    		LXI  H,01FC2H   ;8KBAS40.tap
+0054   0003             ;		LXI  H,03FC2H   ;EXBAS40.tap
+0055   0003             ;		LXI  H,07EC2H   ;EDBAS50.tap
+0056   0003 31 12 00    LOOP    LXI  SP,STACK   ;(RE)INIT STACK POINTER
+0057   0006             ;		IN   00H        ;SIO GET STATUS
+0058   0006 DB 06       		IN   06H        ;ACR GET STATUS
+0059   0008 0F          		RRC             ;?BYTE READY
+0060   0009 D8          		RC              ;    NO  RETURN TO LOOP
+0061   000A             ;		IN   01H        ;SIO YES GET BYTE
+0062   000A DB 07       		IN   07H        ;ACR YES GET BYTE
+0063   000C BD          		CMP  L          ;?LEADER BYTE
+0064   000D C8          		RZ              ; YES RETURN TO LOOP
+0065   000E 2D          		DCR  L          ; NO  DECREMENT ADDRESS
+0066   000F 77          		MOV  M,A        ;  MOVE DATA TO MEMORY
+0067   0010 C0          		RNZ             ;?NOT DONE RETURN TO LOOP
+0068   0011 E9          		PCHL            ; YES JUMP TO TAPE LOADER
+0069   0012 03 00       STACK:  .DW  LOOP
+0070   0014             .END
+tasm: Number of errors = 0

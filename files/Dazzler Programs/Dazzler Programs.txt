@@ -1,0 +1,46 @@
+Documentation for the Dazzler games and related hardware is on the Altair32
+Web site: http://www.altair32.com
+
+
+General Process
+===============
+* start the Altair32
+* open Dazzler screen (F7)
+* load an image, say Spacewar load/run 0000
+* run the image. Spacewar should pop right on the console.
+
+For spacewar (put on asbestos suit, that's a sun)
+tap '=' (unshifted+) to set fast mode and to release all buttons, listen for beep
+tap left/right to rotate,   tap center to stop
+tap 1 to shoot,             tap center to stop shooting
+tap up to engage thrust,    tap center to disengage
+hold down to pull joystick all the way back for hyperspace, tap center to release
+
+tap,center,tap,center,tap,center,tap....
+just like old flight simulators without joysticks
+
+
+*	'=' select fast mode 'reset' (for chase, spacewar, tankwar)
+*	    release all buttons and center both sticks and beeps
+*
+*	'-' select slow mode 'doodle' (for doodle, track)
+*		release all buttons do NOT center sticks and beeps
+*
+*
+*	joy1 buttons 1234   joy2 buttons 1234
+*	keyboard ->  1234                7890
+*
+*	              E
+* 				W   R                 I
+*  joy1 stick  S (D) F  joy2 stick J (K) L
+*				X   V                 ,
+*				  C
+*
+*	'D' centers joy1 stick
+*		?in fast mode releases button 1 (spacewar,tankwar fire button)
+*		?in slow mode releases buttons 1234 (doodle colors)
+*
+*	'K' centers joy2 stick
+*		other actions same as 'D'
+*
+*	joysticks should work with upper or lower case

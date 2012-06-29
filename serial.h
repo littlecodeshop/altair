@@ -25,4 +25,6 @@
 #define ADM3A_DATA_PORT     0x11 
 
 //  Possible values of status register
-
+/* Tx Rx values */
+#define RxStat_BIT	0x01	// Ready to receive
+#define TxStat_BIT	0x02	// Ready to transmit

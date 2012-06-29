@@ -1,0 +1,56 @@
+;**************************************************************
+;
+; CASSETTE LOADER
+;
+;	COMPILE WITH "tasm -85 -b casslodr.asm"
+;
+;**************************************************************
+	.org	0000H
+
+CONSTAT	.EQU	06H		;IO STATUS PORT
+CONDATA	.EQU	07H		;IO DATA PORT
+
+;
+; If required, initialize the UAR/T here.
+;
+
+; Code assumes that SR_bit0=0=DAV and SR_bit7=0=TMBT 
+;
+
+
+; H=HIGH BYTE OF LOAD ADDRESS
+; L=VALUE OF LEADER BYTE  !
+; AND LENGTH OF LOADER    !!
+; AND LOW BYTE OF ADDRESS !!!
+;	LXI  H,00FAEH   ;4K32.cas
+	LXI  H,01FC2H   ;8K40.cas
+	
+;DON'T ASSUME LEADER UNTIL WE'VE
+;READ 64 LEADER BYTES IN A ROW
+SKIP    MVI	C,64		;SET LEADER COUNT
+STAT    IN	CONSTAT		;GET STATUS
+	RRC                     ;BIT0 >> CY
+	JC	STAT		;IF CY RETURN TO STAT
+	IN	CONDATA		;ELSE GET BYTE
+	CMP	L		;LEADER BYTE?
+	JNZ	SKIP		;NO? GO RESET COUNT
+	DCR	C 		;COUNT DOWN
+	JNZ	STAT		;NOT DONE RETURN TO SAT
+;
+;ASSUME WE'RE IN LEADER
+;
+LOOP	LXI	SP,STACK	;RESET STACK POINTER
+	IN	CONSTAT		;GET STATUS
+	RRC			;BYTE READY?
+	RC			;NO? RETURN TO LOOP
+	IN	CONDATA		;GET BYTE
+	CMP	L		;LEADER BYTE?
+	RZ			;YES? RETURN TO LOOP
+	DCR	L		;COUNT DOWN
+	MOV	M,A		;LAST TO FIRST
+	RNZ			;L NOT 0? RETURN TO LOOP
+	PCHL			;JUMP TO TAPE LOADER
+STACK	.DW	LOOP
+
+	.end
+

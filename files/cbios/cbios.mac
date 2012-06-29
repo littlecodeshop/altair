@@ -1,0 +1,588 @@
+;
+;*******************************************************************************
+;
+; ALTAIR 8800 CP/M 2.2 BIOS (Altair32)
+;
+; Customized for the Altair32 simulation by:            Scott LaBombard
+;                                                       07/25/04
+;
+; Based on the excellent simulation work by:            Peter Schorn
+; Also based on the original simulation work by:        Charles E. Owen, Jr.
+;
+;*******************************************************************************
+;
+
+        .8080
+
+jpopcod equ     (jmp)           ; jp op-code
+jpzopcd equ     (jz)            ; jp z op-code
+
+        .Z80                    ; mnemonics only, runs on 8080 as well
+
+        maclib  MEMCFG.LIB      ; get msize and bioslen values
+
+ccplen  equ     0800h           ; cp/m constant
+bdoslen equ     0e00h           ; cp/m constant
+cpmlen  equ     (ccplen + bdoslen + bioslen + 03ffh) / 0400h    ; len in decimal (rounded)
+
+ccp     equ     (msize - cpmlen) * 1024         ; ccp start address
+bdos    equ     ccp + ccplen + 6                ; bdos start address
+bios    equ     ccp + ccplen + bdoslen          ; bios start address
+
+wbotloc equ     000h            ; warm boot location
+bdosloc equ     005h            ; bdos entry location
+cdisk   equ     004h            ; current disk location
+
+;
+; disk controller specs ...
+;
+;       Address         Mode    Function
+;       -------         ----    --------
+;       selout          Out     Selects and enables controller and drive
+;       statin          In      Indicates status of drive and controller
+;       dskcon          Out     Controls disk function
+;       secpos          In      Indicates current sector position of disk
+;       dskwrit         Out     Write data
+;       dskread         In      Read data
+;
+
+; disk equates (ports)
+selout  equ     8               ; port to select and enable controller and drive (OUT)
+statin  equ     8               ; port indicating status of drive and controller (IN)
+dskcon  equ     9               ; port to control disc function (OUT)
+secpos  equ     9               ; port to indicate current sector position of disk (IN)
+dskwrit equ     10              ; port to write data (OUT)
+dskread equ     10              ; port to read data (IN)
+
+; disk equates (configuration)
+ndisks  equ     8               ; total number of disks
+trklow  equ     78              ; indicator for bad track position (tracks+1, LD drives)
+trkhigh equ     255             ; indicator for bad track position (tracks+1, HD drives)
+asecsiz equ     137             ; sector size Altair
+csecsiz equ     128             ; sector size CP/M
+bootdr1 equ     000h            ; default drive to boot from
+bootdr2 equ     080h            ; default drive reset mask
+dirent  equ     255             ; number of directory entries
+restrk  equ     6               ; reserved tracks
+dsm0    equ     254             ; maximum data block number for low-density disks
+dsm1    equ     1efh            ; maximum data block number for high-density disks
+spt     equ     32              ; sectors per track
+sptmask equ     spt-1           ; mask corresponding to 'spt'
+cks     equ     (dirent+1)/4
+
+; disk equates (controller status masks)
+mhm     equ     002h            ; head movement mask
+mtzero  equ     040h            ; head on track zero mask
+mall    equ     0ffh            ; everything ok mask
+
+; disk equates (controller commands)
+cstepin equ     001h            ; step in command
+cstepot equ     002h            ; step out command
+cload   equ     004h            ; load head to drive surface command
+cuload  equ     008h            ; unload head from drive surface command
+cwrseq  equ     080h            ; 'start write enable sequence' command
+
+; console equates (ports)
+constat equ     16              ; sio port 1 status port
+condata equ     17              ; sio port 1 data port
+punstat equ     18              ; sio port 2 status port
+pundata equ     19              ; sio port 2 data port
+
+; console equates (status masks)
+mout    equ     002h            ; output allowed mask
+
+; console equates (commands)
+creset  equ     003h            ; reset command
+
+
+;printer equates (ports)
+pctrl   equ     002h            ; printer control port
+pdata   equ     003h            ; printer data port
+
+;printer equates (status masks)
+prtbsy  equ     002h            ; printer busy mask
+pjam    equ     004h            ; printer jammed mask
+
+;printer equates (commands)
+dmpbuf  equ     001h            ; print buffer w/linefeed
+
+; miscellaneous equates
+bioserr equ     1               ; 1 indicates BIOS error
+cr      equ     13              ; Carriage Return
+lf      equ     10              ; Line Feed
+
+        aseg
+        org     0100h
+        .phase  bios
+
+        jp      boot            ; cold start
+wboote: jp      wboot           ; warm start (reboot)
+        jp      const           ; console status
+        jp      conin           ; console input
+        jp      conout          ; console output
+        jp      list            ; list character out
+        jp      punch           ; punch character out
+        jp      reader          ; read character in
+        jp      home            ; move disk head to home
+        jp      seldsk          ; select disk drive
+        jp      settrk          ; set track number
+        jp      setsec          ; set sector number
+        jp      setdma          ; set disk memory read/write address
+        jp      read            ; read sector
+        jp      write           ; write sector
+        jp      listst          ; list dev status test
+        jp      sectrn          ; sector translate
+
+; routine to hand control to already-loaded cp/m ccp
+boot:   ld      a,bootdr1       ; load default boot drive
+        ld      (cdisk),a       ; save for ccp
+        ld      (diskno),a      ; save for cbios usage
+        ld      de,msg1         ; print welcome message
+        call    msg
+entcpm: ld      a,jpopcod       ; jp instruction code
+        ld      (wbotloc),a     ; store at entry to warm boot
+        ld      hl,wboote       ; get jump location
+        ld      (wbotloc+1),hl  ; and store it after jp instruction
+        ld      (bdosloc),a     ; jp instruction code for entry to bdos
+        ld      hl,bdos         ; get jump location
+        ld      (bdosloc+1),hl  ; and store it after jp instruction
+        ld      a,creset        ; reset command
+        out     (constat),a     ; reset console device
+        out     (punstat),a     ; and list/punch device
+        ld      bc,0080h
+        call    setdma
+        ld      a,(cdisk)       ; get current disk
+        cp      ndisks          ; does it exist?
+        jp      c,ent1          ; yes, proceed
+        ld      a,bootdr1       ; get boot drive
+        ld      (cdisk),a       ; and make it current disk
+ent1:   ld      c,a             ; inform ccp
+        ei
+        jp      ccp
+
+; print the message pointed to by <DE> and terminated by '$' to the console
+; leaves <B> unchanged
+msg:    ld      a,(de)          ; get character
+        cp      '$'             ; is is the terminating character?
+        ret     z               ; yes, we are done
+        ld      c,a             ; 'conout' expects the character in <C>
+        call    conout          ; disply it on console
+        inc     de              ; point to next character
+        jp      msg             ; and repeat
+
+; modified code from the altair boot loader. this reads the
+; image of the cp/m ccp and bdos directly from the boot
+; tracks and loads it in place.
+wboot:  ld      a,bootdr1       ; make sure that ccp and bdos are loaded from correct disk
+        out     (selout),a      ; select it
+        ld      a,cload         ; load head command
+        out     (dskcon),a      ; load head to drive surface
+        ld      sp,chk02
+        call    dhome           ; position disk head on track zero
+        ld      de,ccp          ; destination load address
+        ld      b,7             ; first sector to read on track zero
+nextsc: push    bc              ; save current sector to read, <C> is undefined
+        push    de              ; save current destination load address
+        call    seclp2          ; position to sector in <B>
+        call    blread          ; read the sector
+        pop     de              ; restore current destination load address, <DE> is destination
+        ld      hl,altbuf+3     ; ignore first three byte of buffer, <HL> is source
+        call    ldir            ; <BC> has been set by 'blread'
+        pop     bc              ; <B> is current sector, <C> is undefined
+        ld      hl,bios         ; when <DE> reaches this address we are done
+        ld      a,d
+        cp      h
+        jp      nz,decide
+        ld      a,e
+        cp      l
+decide: jp      nc,gotoit       ; jump if everything loaded
+        inc     b               ; compute next sector number
+        inc     b
+        ld      a,b
+        cp      spt             ; compare new sector number with sectors per track
+        jp      c,nextsc        ; continue if less
+        ld      b,1             ; otherwise prepare for odd numbered sectors
+        jp      z,nextsc        ; if old sector number was equal to sectors per track
+        call    whmove          ; loop until head movement is allowed
+        ld      a,cstepin       ; step in one track command
+        out     (dskcon),a      ; step in one track
+        ld      b,0             ; start with even sectors
+        jp      nextsc
+gotoit: ld      a,bootdr2       ; clear disk controller of correct disk
+        out     (selout),a      ; do it
+        ld      a,(diskno)      ; get current disk number
+        push    af              ; save current disk number
+        ld      a,0             ; first disk drive entry to reset
+resett: ld      (diskno),a      ; point to current drive in table to reset
+        call    calcd           ; <HL> = curr trk addr for this disk, <E> = max 
+tracks
+        ld      (hl),e          ; reset current track entry to max tracks value
+        ld      a,(diskno)      ; get current disk number
+        inc     a               ; point to next disk table entry to reset
+        cp      ndisks          ; compare to total number of installed drives
+        jp      c,resett        ; jump if more to go
+        pop     af              ; get saved disk number
+        ld      (diskno),a      ; restore saved disk as current disk number
+        jp      entcpm          ; track table initialized ...go prep to enter cp/m
+
+;
+; console in/out routines - use sio port 1
+;
+const:  in      a,(constat)     ; get console status
+        rra                     ; I bit into carry
+        ld      a,0             ; prepare no character available
+        ret     nc              ; I bit clear means no character, done
+        dec     a               ; character available, result is 0ffh
+        ret                     ; done
+
+conin:  in      a,(constat)     ; get console status
+        rra                     ; I bit into carry
+        jp      nc,conin        ; jump back if no character available
+        in      a,(condata)     ; read character
+        and     7fh             ; clear bit 8
+        ret
+
+conout: in      a,(constat)     ; get console status
+        and     mout            ; mask output bit
+        jp      z,conout        ; jump back if not ready for output
+        ld      a,c             ; prepare character for output
+        out     (condata),a     ; do it
+        ret
+
+;
+; printer routineS (MITS 88-LPR)
+;
+list:   in      a,(pctrl)
+        and     prtbsy
+        jp      z,list
+        ld      a,c
+        cp      lf
+        jp      nz,list1
+        ld      a,dmpbuf
+        out     (pctrl),a
+        ret
+
+list1:  cp      20h             ; insure data falls within the lpr's char set
+        ret     c
+        cp      60h
+        jp      c,list2
+        sub     20h
+list2:  out     (pdata),a
+        ret
+
+listst: in      a,(pctrl)
+        and     prtbsy
+        jp      z,lst1
+        and     pjam
+        ld      a,0ffh
+        ret     nz
+lst1:   ld      a,0
+        ret
+
+;
+; reader/punch routines use sio port 2
+;
+punch:  in      a,(punstat)     ; get punch status
+        and     mout            ; mask output bit
+        jp      z,punch         ; jump back if not ready for output
+        ld      a,c             ; prepare character for output
+        out     (pundata),a     ; do it
+        ret
+
+reader: in      a,(punstat)     ; get reader status
+        rra                     ; I bit into carry
+        jp      nc,reader       ; jump back if no character available
+        in      a,(pundata)     ; read character
+        and     7fh             ; clear parity bit
+        ret
+
+home:   ld      c,0             ; move to track 00
+        call    settrk
+        ret
+
+seldsk: ld      hl,0            ; select disk number
+        ld      a,c
+        ld      (diskno),a
+        cp      ndisks          ; number of disk drives
+        ret     nc              ; error - disk number too high
+        ld      l,a             ; <HL> := disk number
+        ld      h,0
+        add     hl,hl           ; disk number * 2
+        add     hl,hl           ; disk number * 4
+        add     hl,hl           ; disk number * 8
+        add     hl,hl           ; disk number * 16
+        ld      de,dpbase       ; dpbase entries have size of 16 bytes
+        add     hl,de           ; <HL> = 16 * disknumber + dpbase
+        ret
+
+settrk: ld      a,c             ; save track
+        ld      (track),a
+        ret
+
+setsec: ld      a,c             ; set sector
+        ld      (sector),a
+        ret
+
+sectrn: ex      de,hl
+        add     hl,bc
+        ld      l,(hl)
+        ld      h,0
+        ret
+
+setdma: ld      l,c             ; set dma address
+        ld      h,b
+        ld      (dmaad),hl
+        ret
+
+;
+; altair disk read/write drivers
+;
+read:   call    poshed          ; select disk 'diskno' and position disk head to 'track' 
+        call    secget          ; position head to desired sector
+        di
+        call    blread
+        ld      a,cuload        ; unload head command
+        out     (dskcon),a      ; do it
+        ei
+        ld      de,altbuf+3     ; address of sector just read
+        ld      hl,(dmaad)      ; destination address
+        ex      de,hl           ; prepare for ldir
+        call    ldir            ; move
+        xor     a               ; <A> := 0 means no error
+        ret
+
+write:  call    poshed          ; select desired disk and position to desired track
+        call    secget          ; position head to desired sector
+        ld      hl,(dmaad)      ; source of sector is in 'dmaad'
+        ld      de,altbuf+3     ; destination inside local buffer
+        ld      bc,csecsiz      ; sector size is 128
+        call    ldir            ; block move
+        ld      a,cwrseq        ; command for 'start write enable sequence'
+        out     (dskcon),a      ; do it
+        di
+        ld      hl,altbuf       ; point to first byte in local buffer
+        ld      b,asecsiz+1     ; num of bytes to write (add. byte triggers 'real' write)
+wready: in      a,(statin)      ; get status
+        rra                     ; get bit for ready for write
+        jp      c,wready        ; loop until ready for write
+        ld      a,(hl)          ; byte to write
+        out     (dskwrit),a     ; write byte
+        inc     hl              ; point to next byte
+        dec     b               ; decrement counter of bytes
+        jp      nz,wready       ; jp if not done
+        ld      a,cuload        ; unload head command
+        out     (dskcon),a      ; do it
+        ei
+        xor     a               ; <A> := 0 means no error
+        ret
+
+; Postcondition: 'altbuf' contains 'asecsiz' many bytes, <BC> is set to 'csecsiz
+'
+blread: ld      hl,altbuf       ; address of sector buffer
+        ld      e,asecsiz       ; number of bytes to read
+blrd1:  in      a,(statin)      ; get disk status
+        or      a               ; set sign of byte
+        jp      m,blrd1         ; loop until disk has new byte to read
+        in      a,(dskread)     ; read byte of sector
+        ld      (hl),a          ; store into buffer
+        inc     hl              ; point to next position in buffer
+        dec     e               ; decrement size counter
+        jp      nz,blrd1        ; if not zero, we need to continue
+        ld      bc,csecsiz      ; sector size in preparation for call to 'ldir'
+        ret
+
+; position disk on track zero, <A> == 0 at the end
+dhome:  in      a,(statin)      ; position disk to track 0
+        and     mtzero          ; mask for 'head is on track zero'
+        ret     z               ; track zero reached, done
+        call    whmove          ; loop until head movement is allowed
+        ld      a,cstepot       ; command for 'step head out one track'
+        out     (dskcon),a      ; do it
+        jp      dhome           ; try again
+
+; Select disk 'diskno' and position disk head to 'track'        
+poshed: call    calcd           ; get pointer to 'track' and maxtracks of 'diskno'
+        ld      a,(diskno)      ; get current disk number
+        out     (selout),a      ; select current disk
+        in      a,(statin)      ; get status of selected drive
+        cp      mall            ; ok?
+        jp      z,selerr        ; no!
+        ld      a,b             ; <B> := track of selected disk
+        cp      e               ; <E> := max tracks+1 for this disk
+        jp      nz,alseek       ; if a regular track, proceed to seek
+        call    dhome           ; position disk to track 0
+        ld      b,a             ; <B> := 0 (current track)
+;Input:         location 'track' contains desired track
+;               <B> contains current track
+;Output:        desired track is reached and stored in track array
+alseek: ld      a,(track)       ; seek to 'track' (cur track in b)
+        ld      e,a             ; <E> := desired track
+        ld      a,b             ; <A> := current track
+        sub     e               ; <A> := current track - desired track
+        ret     z               ; we are already at desired track
+        ld      e,a             ; e is the number of "step in" or "step out"
+        jp      c,stpin         ; current track < desired track
+        ld      c,cstepot       ; command for step head out one track
+        jp      aseek           ; perform steps
+stpin:  ld      c,cstepin       ; command for step head in one track
+        cpl                     ; <A> := ~(current track - desired track)
+        inc     a               ; <A> := desired track - current track (positive)
+        ld      e,a             ; <E> is positive number of tracks to move
+aseek:  call    whmove          ; loop until head movement is allowed
+        ld      a,c             ; get command (step in or step out)
+        out     (dskcon),a      ; perform it
+        dec     e               ; next iteration
+        jp      nz,aseek        ; loop if not done
+        call    calcd           ; get pointer to 'track' of 'diskno'
+        ld      a,(track)       ; this is the current track
+        ld      (hl),a          ; update 'track' of 'diskno'
+        ret
+selerr: pop     hl              ; discard return address
+        ld      a,bioserr       ; <A> := 1 means error
+        ret
+
+; loop until head movement is allowed
+whmove: in      a,(statin)      ; get status
+        and     mhm             ; mask for 'head movement allowed'
+        jp      nz,whmove       ; loop until movement allowed
+        ret
+
+; Input:        <none> - implicit input is location 'diskno'
+; Output:       <B> contains the current track of 'diskno'
+;               <E> contains the maximum tracks+1 for 'diskno'
+;               <HL> points to 'track' of 'diskno'
+calcd:  ld      a,(diskno)      ; get 'diskno'
+        add     a,a             ; double diskno to point to correct entry in table
+        ld      e,a             ; <E> := 'diskno' x 2
+        ld      hl,ontrk0       ; track table address
+        ld      d,0             ; clear reg d
+        add     hl,de           ; <HL> points to 'track' of 'diskno'
+        ld      b,(hl)          ; <B> := 'track' of 'diskno'
+        inc     hl              ; point to max tracks entry for this disk
+        ld      e,(hl)          ; <E> := max tracks+1 for 'diskno'
+        dec     hl              ; point back to track entry address for this disk
+        ret
+
+; Input:        'sector' contains desired sector number 
+; Output:       head is positioned at desired sector
+secget: ld      a,cload         ; command to load head to drive surface
+        out     (dskcon),a      ; do it
+        ld      a,(sector)      ; <A> := desired sector
+        dec     a               ; adjust to range 0..(spt-1)
+        ld      b,a             ; <B> := adjusted, desired sector
+        cp      spt             ; compare with sectors per track
+        jp      c,seclp2        ; desired sector is less than total sectors per track, ok
+        ld      de,secmsg       ; prepare error message
+        call    msg             ; print it
+        halt                    ; not much we can do
+seclp2: in      a,(secpos)      ; get sector position
+        rra                     ; rotate T bit into carry
+        jp      c,seclp2        ; loop until sector is positioned to read or write
+        and     sptmask         ; <A> now contains the sector under the head
+        cp      b               ; compare with desired sector
+        jp      nz,seclp2       ; repeat if not equal
+        ret
+
+; Move <BC> bytes from start address <HL> to destination <DE>.
+ldir:   ld      a,(hl)          ; get byte from source
+        ld      (de),a          ; put byte to destination
+        inc     hl              ; point to next source address
+        inc     de              ; point to next destination address
+        dec     bc              ; decrement number of bytes to move
+        ld      a,c             ; <A> := (<B> or <C>)
+        or      b
+        jp      nz,ldir         ; not zero, move again
+        ret
+
+;
+; diskette drives
+;
+dpbase  equ     $
+        dw      atrans,0,0,0,dirbf,mits,chk00,all00
+        dw      atrans,0,0,0,dirbf,mits,chk01,all01
+        dw      atrans,0,0,0,dirbf,mits,chk02,all02
+        dw      atrans,0,0,0,dirbf,mits,chk03,all03
+        dw      atrans,0,0,0,dirbf,mits2,chk04,all04
+        dw      atrans,0,0,0,dirbf,mits2,chk05,all05
+        dw      atrans,0,0,0,dirbf,mits2,chk06,all06
+        dw      atrans,0,0,0,dirbf,mits2,chk07,all07
+
+; copylib (default) format
+mits:   dw      spt             ; spt, sectors per track
+        db      3               ; allocation block shift factor, bsh
+        db      7               ; data alloc block mask, blm, alloc size (bls) =
+ 1024
+        db      0               ; extent mask
+        dw      dsm0            ; dsm, maximum data block number
+        dw      dirent          ; drm, number of directory entries - 1
+        db      0ffh,0          ; al0, al1, 8 blocks reserved to hold all entries
+                                ; 256 * 32 = 8 * 1024
+                                ; (drm+1) * 32 = (number of bits in al0 and al1) * bls
+        dw      cks             ; cks = (drm + 1)/4
+        dw      restrk          ; off, number of tracks skipped at beginning of disk
+
+mits2:  dw      spt             ; spt, sectors per track
+        db      4               ; allocation block shift factor, bsh
+        db      15              ; data alloc block mask, blm, alloc size (bls) = 2048
+        db      0               ; extent mask
+        dw      dsm1            ; dsm, maximum data block number
+        dw      dirent          ; drm, number of directory entries - 1
+        db      0f0h,0          ; al0, al1, 4 blocks reserved to hold all entries
+                                ; 256 * 32 = 4 * 2048
+                                ; (drm+1) * 32 = (number of bits in al0 and al1) * bls
+        dw      cks             ; cks = (drm + 1)/4
+        dw      restrk          ; off, number of tracks skipped at beginning of disk
+
+; speedball (copylib) skewtable
+atrans: db      01,18,03,20,05,22,07,24
+        db      09,26,11,28,13,30,15,32
+        db      17,02,19,04,21,06,23,08
+        db      25,10,27,12,29,14,31,16
+msg1:   db      cr, lf
+        db      '0' + (msize / 10)
+        db      '0' + (msize MOD 10)
+        db      'K CP/M Version 2.2 (Altair32, BIOS Version 1.4)', cr, lf, '$'
+secmsg: db      cr, lf, 'Cannot find sector in register <B>', cr, lf, '$'
+
+; current disk track data table ...
+; first byte is dynamically updated and is set to the current track of each disk
+; second byte is static and is the (max track)+1 count for each disk
+ontrk0: db      trklow,trklow           ; current track# drive 0 (logical 1)
+        db      trklow,trklow           ; current track# drive 1 (logical 2)
+        db      trklow,trklow           ; current track# drive 2 (logical 3)
+        db      trklow,trklow           ; current track# drive 3 (logical 4)
+        db      trkhigh,trkhigh         ; current track# drive 4 (logical 5)
+        db      trkhigh,trkhigh         ; current track# drive 5 (logical 6)
+        db      trkhigh,trkhigh         ; current track# drive 6 (logical 7)
+        db      trkhigh,trkhigh         ; current track# drive 7 (logical 8)
+track:  db      0
+sector: db      0
+dmaad:  dw      0
+diskno: db      0
+
+; begin scratch area for bdos
+dirbf:  ds      128             ; directory work space
+all00:  ds      ((dsm0+1)/8)+1
+all01:  ds      ((dsm0+1)/8)+1
+all02:  ds      ((dsm0+1)/8)+1
+all03:  ds      ((dsm0+1)/8)+1
+all04:  ds      ((dsm1+1)/8)+1
+all05:  ds      ((dsm1+1)/8)+1
+all06:  ds      ((dsm1+1)/8)+1
+all07:  ds      ((dsm1+1)/8)+1
+chk00:  ds      cks
+chk01:  ds      cks
+chk02:  ds      cks
+chk03:  ds      cks
+chk04:  ds      cks
+chk05:  ds      cks
+chk06:  ds      cks
+chk07:  ds      cks
+altbuf: ds      asecsiz+1
+
+biosend equ     $
+
+        .dephase
+
+        end
+

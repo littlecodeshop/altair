@@ -72,9 +72,6 @@ unsigned char ParityTable256[256] =
     P6(0), P6(1), P6(1), P6(0)
 };
 
-/* Tx Rx values */
-#define RxStat_BIT	0x01	// Ready to receive
-#define TxStat_BIT	0x02	// Ready to transmit
 
 extern unsigned char buffer[3];
 extern int bcount ;
@@ -88,7 +85,7 @@ static unsigned char in_port(unsigned char port)
 	    break;
 	case ADM3A_CTRL_PORT:    
 	    ret = TxStat_BIT;
-	    /*if(_kbhit()){
+	    /*if(_kbhit()){ //ca c'etait pour windows avant de mettre glut
 	    //check if it is a control caracter for DSK
 	    char c = _getch();
 	    buffer[0] = c;
@@ -211,7 +208,7 @@ int main(int argc, char** argv)
     icpu->in_port_ptr = in_port;
     icpu->mem = amem;
 
-    loadCoreMem( icpu, "exbas40.bin" );
+    loadCoreMem( icpu, "files/4kbas.bin" );
     glutInit(&argc, argv);
     //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
     glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);
