@@ -34,6 +34,7 @@
 #include "i8080.h"
 #include "font.h"
 #include "serial.h"
+#include "88dsk.h"
 
 /* Bit manipulation and parity tables */
 #define BIT(n)                  ( 1<<(n) )
@@ -112,6 +113,15 @@ static unsigned char in_port(unsigned char port)
 		bcount = 0;
 	    }
 	    break;
+    case DSK_CONTROL:
+        ret = dskStatus();
+        break;
+    case DSK_FUNCTION:
+        ret = sectorPosition();
+        break;
+    case DSK_RDWR:
+        //printf("READING from DSK\n");
+        break;
 	default: 
 	    ret=0x0;
 	    break;
@@ -133,6 +143,16 @@ static void out_port(unsigned char port,unsigned char v)
 	  //  printf("%c",v&0x7F);
 	  //  fflush(stdout);
 	    break;
+    case DSK_CONTROL:
+        printf("DSK CONTROL\n");
+        dskControl(v);
+        break;
+    case DSK_FUNCTION:
+        dskFunction(v);
+        break;
+    case DSK_RDWR:
+        //printf("WRITING to DSK\n");
+        break;
 	default: 
 	    //   LCS_DPRINT("%c<-- OUT port %X\n",v,port);
 	    break;
@@ -152,7 +172,7 @@ static void interrupt(int i)
     else cpu->ipend=0x80|i;*/
 }
 
-void loadCoreMem(I8080_CPU * cpu,char *file)
+void loadCoreMem(I8080_CPU * cpu,char *file,int offset)
 {
     FILE * fp;
     fp = fopen(file,"rb");
@@ -161,7 +181,7 @@ void loadCoreMem(I8080_CPU * cpu,char *file)
 	fseek(fp, 0, SEEK_END);
 	long fileSize = ftell(fp);
 	rewind(fp);
-	fread(cpu->mem,1,fileSize,fp);	
+	fread(cpu->mem+offset,1,fileSize,fp);	
 
     }
     else { //ERROR
@@ -208,7 +228,8 @@ int main(int argc, char** argv)
     icpu->in_port_ptr = in_port;
     icpu->mem = amem;
 
-    loadCoreMem( icpu, "files/4kbas.bin" );
+    //loadCoreMem( icpu, "files/4kbas.bin",0x0 ); //load the basic at offset 0
+    loadCoreMem( icpu, "files/dsk_bootrom/88dskrom.bin",0xFF00 ); // the altair DSK rom starts at 0xFF00
     glutInit(&argc, argv);
     //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
     glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);
