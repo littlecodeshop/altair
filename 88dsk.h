@@ -16,7 +16,7 @@
  * =====================================================================================
  */
 
-
+//DSK IO PORTS
 #define DSK_CONTROL       0x08 //select latches and enables controller and disk drives
 #define DSK_FUNCTION      0x09 //control disk functions
 #define DSK_RDWR          0x0A //write data
@@ -31,9 +31,17 @@
 #define HEAD_CS           0x40
 #define WRITE_ENABLE      0x80
 
+//DISK architecture
+#define NB_TRACKS         77
+#define NB_SECTS          32
+#define SECTOR_SZ         137
 
 //ok lets emulate this mofo :)
 
 void dskControl(unsigned char data);
 unsigned char dskStatus();
 void dskFunction(unsigned char fnct);
+unsigned char sectorPosition();
+void dskLoad(char *file);
+unsigned char dskRead();
+void dskWrite(unsigned char v);

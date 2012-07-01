@@ -120,7 +120,7 @@ static unsigned char in_port(unsigned char port)
         ret = sectorPosition();
         break;
     case DSK_RDWR:
-        //printf("READING from DSK\n");
+        ret=dskRead();
         break;
 	default: 
 	    ret=0x0;
@@ -144,14 +144,13 @@ static void out_port(unsigned char port,unsigned char v)
 	  //  fflush(stdout);
 	    break;
     case DSK_CONTROL:
-        printf("DSK CONTROL\n");
         dskControl(v);
         break;
     case DSK_FUNCTION:
         dskFunction(v);
         break;
     case DSK_RDWR:
-        //printf("WRITING to DSK\n");
+        dskWrite(v);
         break;
 	default: 
 	    //   LCS_DPRINT("%c<-- OUT port %X\n",v,port);
@@ -230,6 +229,7 @@ int main(int argc, char** argv)
 
     //loadCoreMem( icpu, "files/4kbas.bin",0x0 ); //load the basic at offset 0
     loadCoreMem( icpu, "files/dsk_bootrom/88dskrom.bin",0xFF00 ); // the altair DSK rom starts at 0xFF00
+    dskLoad("files/Cpm22.dsk");
     glutInit(&argc, argv);
     //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
     glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);
