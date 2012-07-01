@@ -73,12 +73,16 @@ void dskFunction(unsigned char fnct)
 {
     if(fnct&STEP_IN){printf("step in\n");track=(track+1)%77;}
     if(fnct&STEP_OUT){printf("step out\n");track=(track-1);}
-    if(fnct&HEAD_LOAD){printf("head load\n");}
-    if(fnct&HEAD_UNLOAD){printf("head unload\n");}
+    if(fnct&HEAD_LOAD){
+        //printf("head load\n");
+    }
+    if(fnct&HEAD_UNLOAD){
+        //printf("head unload\n");
+    }
     if(fnct&INT_ENABLED){printf("int enabled\n");}
     if(fnct&INT_DISABLED){printf("int disabled\n");}
     if(fnct&HEAD_CS){printf("head current switch\n");}
-    if(fnct&WRITE_ENABLE){printf("write enable\n");}
+    if(fnct&WRITE_ENABLE){printf("************write enable***********\n");data_position=0;}
     fflush(stdout);
 }
 
@@ -93,9 +97,13 @@ unsigned char sectorPosition()
 unsigned char dskRead()
 {
     //read data in this sector and track
-    int read_pos = (track*32*SECTOR_SZ)+(sector*SECTOR_SZ)+data_position++;//(track*sector*SECTOR_SZ)+data_position++;
+    int read_pos = (track*32*SECTOR_SZ)+(sector*SECTOR_SZ)+data_position++;
     //printf("t%d s%d pos%d data %X\n",track,sector,data_position-1,drive_data[read_pos]);
     return drive_data[read_pos];
 }
 
-void dskWrite(unsigned char v){}
+void dskWrite(unsigned char v){
+    printf("Writing %d %c @t%ds%d",v,v,track,sector);
+    int write_pos = (track*32*SECTOR_SZ)+(sector*SECTOR_SZ)+data_position++;
+    drive_data[write_pos] = v;
+}
