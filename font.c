@@ -2209,7 +2209,7 @@ void printCursor()
 void console_display(void)
 {
     int i;
-    GLfloat white[3] = { 1.0, 1.0, 1.0 };
+    GLfloat white[3] = { 0.0, 1.0, 0.0 };
 
     glClear(GL_COLOR_BUFFER_BIT);
     glColor3fv(white);
