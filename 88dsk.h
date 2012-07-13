@@ -31,8 +31,8 @@
 #define HEAD_CS           0x40
 #define WRITE_ENABLE      0x80
 
-//DISK architecture
-#define NB_TRACKS         77
+//DISK architecture pour le disk 8 pouces
+#define NB_TRACKS         254 //TODO: HD=254 SD=77 n'oublis pas  
 #define NB_SECTS          32
 #define SECTOR_SZ         137
 
@@ -42,6 +42,6 @@ void dskControl(unsigned char data);
 unsigned char dskStatus();
 void dskFunction(unsigned char fnct);
 unsigned char sectorPosition();
-void dskLoad(char *file);
+void dskLoad(char *file,int drivenum);
 unsigned char dskRead();
 void dskWrite(unsigned char v);

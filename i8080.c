@@ -483,7 +483,7 @@ void initCPU(I8080_CPU * cpu){
     int i;
     for (i=0;i<0x100;i++) parity[i]=4&(4^(i<<2)^(i<<1)^i^(i>>1)^(i>>2)^(i>>3)^(i>>4)^(i>>5));
     //start the CPU with 0 PC
-    PC = 0x0000; //TODO mettre 0xFF00 ici pour charger la ROM disk
+    PC = 0xFF00; //TODO mettre 0xFF00 ici pour charger la ROM disk
     SP=0xF000;
 }
 

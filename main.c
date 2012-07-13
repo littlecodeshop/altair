@@ -227,9 +227,12 @@ int main(int argc, char** argv)
     icpu->in_port_ptr = in_port;
     icpu->mem = amem;
 
+    printf("LittleCodeShop.com ALTAIR 8800 Emulator\n\n Execution will start @%X\n",icpu->reg.pc);
+
     //loadCoreMem( icpu, "files/4kbas.bin",0x0 ); //load the basic at offset 0
     loadCoreMem( icpu, "files/dsk_bootrom/88dskrom.bin",0xFF00 ); // the altair DSK rom starts at 0xFF00
-    dskLoad("files/Cpm22.dsk");
+    dskLoad("files/Cpm22HD.dsk",0);
+    dskLoad("files/multiplan.dsk",1);
     glutInit(&argc, argv);
     //NOTE: pour avoir du zbuffer il suffit de mettre GLUT_DEPTH ici, dans les trucs iphone il faut mettre le define USE_DEPTH_BUFFER
     glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);
