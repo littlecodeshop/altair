@@ -6,3 +6,4 @@ altair
 *~
 *.exe
 Makefile.dependencies
+.DS_Store
