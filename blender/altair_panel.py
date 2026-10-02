@@ -211,9 +211,27 @@ def load_user_toggle():
     objs = {o.name.split(".")[0]: o for o in dst.objects if o}
     if len(objs) != 2:
         raise SystemExit("toggle_switch.blend needs objects Toggle_body and Toggle_lever")
-    body, lever = objs["Toggle_body"], objs["Toggle_lever"]
+    # Bake modifiers (at render quality) and object scale/rotation into the
+    # mesh; keep only the location (the lever's is its pivot).
+    tmp = bpy.data.collections.new("_tmp")
+    bpy.context.scene.collection.children.link(tmp)
+    for o in objs.values():
+        tmp.objects.link(o)
+        for mod in o.modifiers:
+            if hasattr(mod, "render_levels"):
+                mod.levels = mod.render_levels
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    out = {}
+    for key, o in objs.items():
+        me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
+        me.name = key + "_mesh"
+        me.transform(Matrix.LocRotScale(None, o.rotation_euler, o.scale))
+        out[key] = (me, Vector(o.location))
+        tmp.objects.unlink(o)
+    bpy.context.scene.collection.children.unlink(tmp)
     print("Using user-made toggle from", TOGGLE_FILE)
-    return body.data, lever.data, Vector(lever.location)
+    return out["Toggle_body"][0], out["Toggle_lever"][0], out["Toggle_lever"][1]
 
 
 def export_toggle_template():
