@@ -191,6 +191,53 @@ def build_toggle_meshes(m):
     return body, lever
 
 
+# ---- User-made toggle switch (optional) ------------------------------------------
+TOGGLE_FILE = os.path.join(OUT_DIR, "elements", "toggle_switch.blend")
+
+
+def load_user_toggle():
+    """Use elements/toggle_switch.blend if present.
+
+    Contract: objects "Toggle_body" and "Toggle_lever"; millimetres; the
+    switch stands on the panel at the origin with +Z pointing out of the
+    panel; the lever is modelled straight (neutral) and its object origin
+    is its pivot (that is where it tilts).  Returns (body_mesh, lever_mesh,
+    lever_location) or None.
+    """
+    if not os.path.exists(TOGGLE_FILE):
+        return None
+    with bpy.data.libraries.load(TOGGLE_FILE, link=False) as (src, dst):
+        dst.objects = [n for n in ("Toggle_body", "Toggle_lever") if n in src.objects]
+    objs = {o.name.split(".")[0]: o for o in dst.objects if o}
+    if len(objs) != 2:
+        raise SystemExit("toggle_switch.blend needs objects Toggle_body and Toggle_lever")
+    body, lever = objs["Toggle_body"], objs["Toggle_lever"]
+    print("Using user-made toggle from", TOGGLE_FILE)
+    return body.data, lever.data, Vector(lever.location)
+
+
+def export_toggle_template():
+    """Write elements/toggle_switch.blend containing the procedural switch."""
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    m = make_materials()
+    body_me, lever_me = build_toggle_meshes(m)
+    c = new_collection("Toggle")
+    add_obj("Toggle_body", body_me, c)
+    add_obj("Toggle_lever", lever_me, c, loc=(0, 0, LEVER_PIVOT_Z))
+    # reference-only helpers: anything named REF_* is ignored by the script
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    ref = bpy.data.meshes.new("REF_panel")
+    bm.to_mesh(ref)
+    bm.free()
+    p = add_obj("REF_panel", ref, c, loc=(0, 0, -1.5))
+    p.scale = (30, 30, 3)
+    p.display_type = "WIRE"
+    os.makedirs(os.path.dirname(TOGGLE_FILE), exist_ok=True)
+    bpy.ops.wm.save_as_mainfile(filepath=TOGGLE_FILE)
+    print("Wrote", TOGGLE_FILE)
+
+
 # ---- Master elements ----------------------------------------------------------
 def new_collection(name, parent=None):
     c = bpy.data.collections.new(name)
@@ -207,7 +254,12 @@ def add_obj(name, data, coll, loc=(0, 0, 0), rot=(0, 0, 0)):
 
 def build_masters(m, elements):
     led_me = build_led_mesh(m)
-    body_me, lever_me = build_toggle_meshes(m)
+    user = load_user_toggle()
+    if user:
+        body_me, lever_me, lever_loc = user
+    else:
+        body_me, lever_me = build_toggle_meshes(m)
+        lever_loc = Vector((0, 0, LEVER_PIVOT_Z))
     masters = {}
 
     for state in ("Off", "On"):
@@ -234,7 +286,7 @@ def build_masters(m, elements):
         c = new_collection("Toggle_" + state, elements)
         add_obj("Toggle_" + state + "_body", body_me, c)
         lv = add_obj("Toggle_" + state + "_lever", lever_me, c,
-                     loc=(0, 0, LEVER_PIVOT_Z),
+                     loc=lever_loc,
                      rot=(sign * math.radians(LEVER_TILT), 0, 0))
         for ob in c.objects:
             ob.cycles.is_caustics_caster = True
@@ -445,6 +497,9 @@ def arg(flag, default=None):
 
 
 if __name__ == "__main__":
+    if "--export-toggle-template" in sys.argv:
+        export_toggle_template()
+        sys.exit(0)
     sc = build()
     sc.cycles.samples = int(arg("--samples", sc.cycles.samples))
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT_DIR, "altair_panel.blend"))
