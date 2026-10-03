@@ -27,18 +27,17 @@ PANEL_W, PANEL_H, PANEL_T = 432.0, 178.0, 10.0
 ADDRESS = 0b0000_0001_1100_1010
 DATA = 0xC3
 STATUS_ON = {"MEMR", "M1", "WO"}
-SWITCH_PITCH, GROUP_GAP = 12.5, 4.0
-LEVER_TILT = 35.0
-LEVER_PIVOT_Z = 8.0
+SWITCH_PITCH, GROUP_GAP = 17.0, 6.0
+LEVER_TILT = 30.0
+LEVER_PIVOT_Z = 4.6
 LED_LIGHT_W = 800.0
 
 # Flat colours (sRGB hex).  Emission strength only applies to "led_on".
 PALETTE = {
-    "panel": "2F5DA8", "inset": "1B2F5E", "group_a": "4F86D9",
-    "group_b": "7BA7E8", "control": "F2C14E", "power": "E8604C",
-    "text": "F4F1E8", "metal": "D5DCE6", "nut": "8C96A3", "knob": "F4F1E8",
-    "bezel": "E8E2D0", "led_off": "6B1A1A", "led_on": "FF3B2F",
-    "case": "C9CED8", "cover": "6F86AD", "feet": "3A3F4B",
+    "panel": "141518", "frame": "5FA8D8", "line": "E9E6DC", "text": "E9E6DC",
+    "logo": "C9A24A", "logo_text": "1A1A1A", "metal": "D5DCE6", "nut": "AEB6C0",
+    "led_off": "7A1414", "led_on": "FF2A1F",
+    "case": "D8D4C8", "cover": "E6E2D6", "feet": "3A3F4B",
     "desk": "C68B59", "desk_edge": "9C6A42",
 }
 SKY = "9ED8F0"
@@ -59,9 +58,11 @@ def make_materials():
         b = m.node_tree.nodes["Principled BSDF"]
         b.inputs["Base Color"].default_value = srgb(hx)
         b.inputs["Roughness"].default_value = 0.55
-        if name in ("metal", "nut"):
+        if name in ("metal", "nut", "logo"):
             b.inputs["Metallic"].default_value = 0.6
             b.inputs["Roughness"].default_value = 0.3
+        if name in ("panel", "frame"):                # glossy plastic / anodised trim
+            b.inputs["Roughness"].default_value = 0.25
         if name == "led_on":
             b.inputs["Emission Color"].default_value = srgb(hx)
             b.inputs["Emission Strength"].default_value = 1.6
@@ -117,6 +118,21 @@ class Builder:
         bmesh.ops.create_icosphere(self.bm, subdivisions=subdiv, radius=r, matrix=m)
         self._tag(old, mat)
 
+    def paddle(self, w0, w1, t, z0, z1, mat, chamfer=0.0):
+        """Flat bat-handle lever: width w0 at z0 widening to w1 at z1."""
+        old = set(self.bm.faces)
+        m = (Matrix.Translation((0, 0, (z0 + z1) / 2))
+             @ Matrix.Diagonal((w0, t, z1 - z0, 1)))
+        ret = bmesh.ops.create_cube(self.bm, size=1.0, matrix=m)
+        for v in ret["verts"]:
+            if v.co.z > (z0 + z1) / 2:
+                v.co.x *= w1 / w0
+        if chamfer:
+            edges = {e for v in ret["verts"] for e in v.link_edges}
+            bmesh.ops.bevel(self.bm, geom=list(edges), offset=chamfer,
+                            segments=1, affect="EDGES")
+        self._tag(old, mat)
+
     def mesh(self, name):
         me = bpy.data.meshes.new(name)
         self.bm.to_mesh(me)
@@ -145,32 +161,35 @@ def add_obj(name, data, coll, loc=(0, 0, 0), rot=(0, 0, 0)):
 def build_masters(M, elements):
     masters = {}
 
-    b = Builder([M["bezel"], M["led_off"]])
-    b.prism(5.0, 0.0, 2.2, 8, M["bezel"], chamfer=0.7, rot=math.pi / 8)
-    b.prism(3.6, 1.5, 3.2, 8, M["led_off"], rot=math.pi / 8)
-    b.ico(3.6, (0, 0, 3.2), M["led_off"], subdiv=1, scale=(1, 1, 0.75))
+    # LED: plain red 5 mm-style dome with a rim, poking through the panel
+    b = Builder([M["led_off"]])
+    b.prism(4.3, 0.0, 0.9, 8, M["led_off"], chamfer=0.35, rot=math.pi / 8)
+    b.prism(3.6, 0.9, 4.0, 8, M["led_off"], rot=math.pi / 8)
+    b.ico(3.6, (0, 0, 4.0), M["led_off"], subdiv=1)
     led_me = b.mesh("LP_LED_mesh")
     for state in ("Off", "On"):
         c = new_collection("LP_LED_" + state, elements)
         o = add_obj("LP_LED_" + state + "_obj", led_me, c)
         if state == "On":
-            o.material_slots[1].link = "OBJECT"
-            o.material_slots[1].material = M["led_on"]
+            o.material_slots[0].link = "OBJECT"
+            o.material_slots[0].material = M["led_on"]
             ld = bpy.data.lights.new("LP_LED_light", "POINT")
             ld.color = srgb(PALETTE["led_on"])[:3]
             ld.energy, ld.shadow_soft_size = LED_LIGHT_W, 2.0
-            add_obj("LP_LED_light", ld, c, loc=(0, 0, 7.5))
+            add_obj("LP_LED_light", ld, c, loc=(0, 0, 9.0))
         masters["LED_" + state] = c
 
+    # Toggle: bolted through the panel -> thin hex nut flush on the front,
+    # short threaded bushing (ridges), flat bat-handle lever.
     b = Builder([M["nut"], M["metal"]])
-    b.prism(5.6, 0.0, 1.2, 8, M["nut"], chamfer=0.4, rot=math.pi / 8)
-    b.prism(4.6, 1.2, 4.2, 6, M["nut"], chamfer=0.8)
-    b.prism(3.0, 4.2, LEVER_PIVOT_Z + 0.6, 8, M["metal"], chamfer=0.5, rot=math.pi / 8)
+    b.prism(5.4, 0.0, 1.8, 6, M["nut"], chamfer=0.55)
+    b.prism(2.6, 1.6, LEVER_PIVOT_Z + 0.6, 8, M["metal"], rot=math.pi / 8)
+    for z in (1.9, 3.0, 4.1):                                   # thread ridges
+        b.prism(3.05, z, z + 0.5, 8, M["metal"], rot=math.pi / 8)
     body_me = b.mesh("LP_Toggle_Body_mesh")
 
-    b = Builder([M["metal"], M["knob"]])
-    b.prism(2.2, -1.0, 12.0, 6, M["metal"], r_top=1.4)
-    b.ico(3.0, (0, 0, 14.0), M["knob"], subdiv=1)
+    b = Builder([M["metal"]])
+    b.paddle(3.2, 4.4, 1.9, -1.5, 13.5, M["metal"], chamfer=0.5)
     lever_me = b.mesh("LP_Toggle_Lever_mesh")
 
     for state, sign in (("Up", -1), ("Down", 1)):
@@ -230,75 +249,84 @@ def texts_to_flat_meshes():
 
 # ---- panel, case, desk -------------------------------------------------------------
 def addr_x(bit):
-    return 70.0 + (15 - bit) * SWITCH_PITCH + (5 - (bit + 2) // 3) * GROUP_GAP
+    """Address LED and switch columns share the same x (LEDs sit above)."""
+    return 92.0 + (15 - bit) * SWITCH_PITCH + (5 - (bit + 2) // 3) * GROUP_GAP
+
+
+OCTAL_GROUPS = [(15, 15), (14, 12), (11, 9), (8, 6), (5, 3), (2, 0)]
 
 
 def build_panel(M, masters, coll):
-    z_stat, z_addr, z_sw = 134.0, 102.0, 44.0
-    INSET = -1.5                                   # front of the inset plates
+    """Layout after the real 8800: status LEDs top-left, D7..D0 above A7..A0,
+    WAIT/HLDA + A15..A0 on the second row, address/sense switches straight
+    below their LEDs, control switches on a lower row, logo strip at the
+    bottom.  Black smoked-plastic front in a light-blue frame."""
+    z_led1, z_led2, z_sw, z_ctrl = 150.0, 127.0, 96.0, 56.0
+    F = 8.0                                        # frame width
 
-    b = Builder([M["panel"], M["inset"], M["group_a"], M["group_b"],
-                 M["control"], M["power"]])
-    b.box(0, PANEL_W, 0, PANEL_T, 0, PANEL_H, M["panel"], chamfer=3.0)
+    b = Builder([M["panel"], M["frame"], M["line"], M["logo"]])
+    b.box(0, PANEL_W, 0, PANEL_T, 0, PANEL_H, M["panel"], chamfer=1.5)
+    for x0, x1, z0, z1 in ((-F, 0, -F, PANEL_H + F), (PANEL_W, PANEL_W + F, -F, PANEL_H + F),
+                           (0, PANEL_W, PANEL_H, PANEL_H + F), (0, PANEL_W, -F, 0)):
+        b.box(x0, x1, -3.0, PANEL_T + 2, z0, z1, M["frame"], chamfer=1.5)
 
-    def plate(x0, x1, z0, z1, mat):
-        b.box(x0, x1, INSET, 0.5, z0, z1, mat, chamfer=1.0)
+    def hline(x0, x1, z, w=0.9):
+        b.box(x0, x1, -0.3, 0.2, z - w / 2, z + w / 2, M["line"])
 
-    plate(26, 194, z_stat - 9, z_stat + 9, M["inset"])           # status
-    plate(240, 377, z_stat - 9, z_stat + 9, M["inset"])          # data
-    plate(22, addr_x(0) + 9, z_addr - 9, z_addr + 9, M["inset"])  # address
-    groups = [(15, 15), (14, 12), (11, 9), (8, 6), (5, 3), (2, 0)]
-    for i, (hi, lo) in enumerate(groups):
-        plate(addr_x(hi) - 6.5, addr_x(lo) + 6.5, z_sw - 17, z_sw + 17,
-              M["group_a"] if i % 2 else M["group_b"])
-    plate(12, 32, z_sw - 17, z_sw + 17, M["power"])
-    plate(295, 417, z_sw - 17, z_sw + 17, M["control"])
+    hline(20, 152, z_led1 - 8)                                    # status
+    hline(addr_x(7) - 6, addr_x(0) + 6, z_led1 - 8)               # data
+    for hi, lo in OCTAL_GROUPS:                                   # address
+        hline(addr_x(hi) - 6, addr_x(lo) + 6, z_led2 - 8)
+        hline(addr_x(hi) - 6, addr_x(lo) + 6, z_sw - 14)
+    b.box(78, 300, -0.8, 0.2, 9, 27, M["logo"], chamfer=0.5)      # logo strip
     add_obj("LP_Panel", b.mesh("LP_Panel_mesh"), coll)
 
     tx = M["text"]
-    label("ALTAIR 8800", 20, 160, 13, tx, coll, depth=1.2, bevel=0.4, align="LEFT")
-    label("MITS", 410, 160, 9, tx, coll, depth=1.0, bevel=0.3, align="RIGHT")
-    label("STATUS", 110, z_stat - 14, 4.5, tx, coll)
-    label("DATA", 308, z_stat - 14, 4.5, tx, coll)
-    label("ADDRESS", addr_x(8), z_addr - 14, 4.5, tx, coll)
+    label("ALTAIR 8800 COMPUTER", 189, 18, 9, M["logo_text"], coll, y=-0.8,
+          depth=0.4, bevel=0.15)
+    label("mits", 52, 18, 9, tx, coll, depth=0.6, bevel=0.2)
+    label("STATUS", 86, z_led1 - 13, 3.4, tx, coll)
+    label("DATA", (addr_x(7) + addr_x(0)) / 2, z_led1 - 13, 3.4, tx, coll)
+    label("ADDRESS", addr_x(8), z_led2 - 13, 3.4, tx, coll)
 
     def led(name, x, z, on):
         instance("LP_LED_" + name, masters["LED_On" if on else "LED_Off"],
-                 x, INSET, z, coll)
+                 x, 0.0, z, coll)
 
-    status = ["INT", "WO", "STACK", "HLTA", "OUT", "M1", "INP", "MEMR", "PROT", "INTE"]
+    status = ["INTE", "PROT", "MEMR", "INP", "M1", "OUT", "HLTA", "STACK", "WO", "INT"]
     for i, n in enumerate(status):
-        led(n, 34.0 + i * 17.5, z_stat, n in STATUS_ON)
-    for i in range(8):
-        led(f"D{7 - i}", 249.0 + i * 17.0, z_stat, bool(DATA >> (7 - i) & 1))
-    led("WAIT", 31, z_addr, False)
-    led("HLDA", 48, z_addr, False)
+        led(n, 26.0 + i * 13.0, z_led1, n in STATUS_ON)
+    for bit in range(7, -1, -1):
+        led(f"D{bit}", addr_x(bit), z_led1, bool(DATA >> bit & 1))
+    led("WAIT", 40, z_led2, False)
+    led("HLDA", 58, z_led2, False)
     for bit in range(15, -1, -1):
-        led(f"A{bit}", addr_x(bit), z_addr, bool(ADDRESS >> bit & 1))
+        led(f"A{bit}", addr_x(bit), z_led2, bool(ADDRESS >> bit & 1))
 
-    def toggle(name, x, up):
+    def toggle(name, x, z, up):
         instance("LP_SW_" + name, masters["Toggle_Up" if up else "Toggle_Down"],
-                 x, INSET, z_sw, coll)
+                 x, 0.0, z, coll)
 
     for bit in range(15, -1, -1):
-        toggle(f"A{bit}", addr_x(bit), bool(ADDRESS >> bit & 1))
-        label(str(bit), addr_x(bit), z_sw - 22, 4.5, tx, coll)
-    toggle("power", 22, True)
-    label("ON", 22, z_sw + 22, 4, tx, coll)
-    label("OFF", 22, z_sw - 22, 4, tx, coll)
-    ctrl = [("STOP", "RUN"), ("STEP", "STEP"), ("EXAM", "NEXT"),
-            ("DEP", "NEXT"), ("RESET", "CLR"), ("PROT", "UNPR"), ("AUX", "AUX")]
-    for i, (top, bot) in enumerate(ctrl):
-        x = 304.0 + i * 17.3
-        toggle(f"ctrl{i}", x, False)
-        label(top, x, z_sw + 22, 3.4, tx, coll)
-        label(bot, x, z_sw - 22, 3.4, tx, coll)
+        toggle(f"A{bit}", addr_x(bit), z_sw, bool(ADDRESS >> bit & 1))
+        label(str(bit), addr_x(bit), z_sw - 19, 3.4, tx, coll)
+    toggle("power", 40, z_ctrl, True)
+    label("ON", 40, z_ctrl + 12, 3.0, tx, coll)
+    label("OFF", 40, z_ctrl - 12, 3.0, tx, coll)
+    tops = ["STOP", "STEP", "EXAMINE", "DEPOSIT", "RESET", "PROTECT", "AUX", "AUX"]
+    bots = ["RUN", "", "NEXT", "NEXT", "CLR", "UNPROT", "", ""]
+    for i, (top, bot) in enumerate(zip(tops, bots)):
+        x = (addr_x(15 - 2 * i) + addr_x(14 - 2 * i)) / 2
+        toggle(f"ctrl{i}", x, z_ctrl, False)
+        label(top, x, z_ctrl + 12, 2.8, tx, coll)
+        if bot:
+            label(bot, x, z_ctrl - 12, 2.8, tx, coll)
 
 
 def build_case_and_desk(M, coll):
     b = Builder([M["case"], M["cover"], M["feet"]])
-    b.box(-6, PANEL_W + 6, PANEL_T, 460, -6, PANEL_H + 2, M["case"], chamfer=4.0)
-    b.box(-9, PANEL_W + 9, PANEL_T + 4, 463, PANEL_H, PANEL_H + 14, M["cover"],
+    b.box(-8, PANEL_W + 8, PANEL_T, 460, -8, PANEL_H + 4, M["case"], chamfer=4.0)
+    b.box(-10, PANEL_W + 10, PANEL_T + 3, 463, PANEL_H + 4, PANEL_H + 16, M["cover"],
           chamfer=4.0)
     for x in (30, PANEL_W - 30):
         for y in (60, 420):
@@ -353,7 +381,7 @@ def build():
         "hero": (target + Vector((-0.5, -1.0, 0.42)).normalized() * 3000, target,
                  860, (1600, 1000)),
         "front": (Vector((PANEL_W / 2, -3000, PANEL_H / 2)),
-                  Vector((PANEL_W / 2, 0, PANEL_H / 2)), 470, (1600, 700)),
+                  Vector((PANEL_W / 2, 0, PANEL_H / 2)), 480, (1600, 760)),
     }
     for name, (loc, tgt, ortho, res) in cams.items():
         cd = bpy.data.cameras.new("cam_lp_" + name)
