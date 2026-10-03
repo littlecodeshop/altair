@@ -107,7 +107,7 @@ def remove_catcher_tint(img):
     px = a.load()
     border = sorted([px[x, 0] for x in range(w)] + [px[x, h - 1] for x in range(w)] +
                     [px[0, y] for y in range(h)] + [px[w - 1, y] for y in range(h)])
-    base = border[len(border) // 2]
+    base = min(border[int(len(border) * 0.98)] + 2, 40)   # noise ceiling
     if base:
         a = a.point(lambda v: 0 if v <= base else round((v - base) * 255 / (255 - base)))
     return Image.merge("RGBA", (r, g, b, a))
