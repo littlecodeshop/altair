@@ -8,3 +8,5 @@ altair
 Makefile.dependencies
 .DS_Store
 *.blend1
+__pycache__/
+blender/xcode/_tmp.png
