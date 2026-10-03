@@ -29,12 +29,12 @@ DATA = 0xC3
 STATUS_ON = {"MEMR", "M1", "WO"}
 SWITCH_PITCH, GROUP_GAP = 17.0, 6.0
 LEVER_TILT = 30.0
-LEVER_PIVOT_Z = 4.6
+LEVER_PIVOT_Z = 3.2                # bushing shows just above the nut
 LED_LIGHT_W = 800.0
 
 # Flat colours (sRGB hex).  Emission strength only applies to "led_on".
 PALETTE = {
-    "panel": "141518", "frame": "5FA8D8", "line": "E9E6DC", "text": "E9E6DC",
+    "panel": "15192A", "frame": "5FA8D8", "line": "E9E6DC", "text": "E9E6DC",
     "logo": "C9A24A", "logo_text": "1A1A1A", "metal": "D5DCE6", "nut": "AEB6C0",
     "led_off": "7A1414", "led_on": "FF2A1F",
     "case": "D8D4C8", "cover": "E6E2D6", "feet": "3A3F4B",
@@ -61,8 +61,10 @@ def make_materials():
         if name in ("metal", "nut", "logo"):
             b.inputs["Metallic"].default_value = 0.6
             b.inputs["Roughness"].default_value = 0.3
-        if name in ("panel", "frame"):                # glossy plastic / anodised trim
+        if name == "frame":                           # anodised trim
             b.inputs["Roughness"].default_value = 0.25
+        if name == "panel":                           # satin painted metal plaque
+            b.inputs["Roughness"].default_value = 0.5
         if name == "led_on":
             b.inputs["Emission Color"].default_value = srgb(hx)
             b.inputs["Emission Strength"].default_value = 1.6
@@ -183,9 +185,9 @@ def build_masters(M, elements):
     # short threaded bushing (ridges), flat bat-handle lever.
     b = Builder([M["nut"], M["metal"]])
     b.prism(5.4, 0.0, 1.8, 6, M["nut"], chamfer=0.55)
-    b.prism(2.6, 1.6, LEVER_PIVOT_Z + 0.6, 8, M["metal"], rot=math.pi / 8)
-    for z in (1.9, 3.0, 4.1):                                   # thread ridges
-        b.prism(3.05, z, z + 0.5, 8, M["metal"], rot=math.pi / 8)
+    b.prism(2.6, 1.6, LEVER_PIVOT_Z + 0.3, 8, M["metal"], rot=math.pi / 8)
+    for z in (2.0, 2.7):                                        # thread ridges
+        b.prism(3.05, z, z + 0.4, 8, M["metal"], rot=math.pi / 8)
     body_me = b.mesh("LP_Toggle_Body_mesh")
 
     b = Builder([M["metal"]])
