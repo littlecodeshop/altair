@@ -46,7 +46,7 @@ DATA = 0xC3                        # D7..D0 (JMP)
 STATUS_ON = {"MEMR", "M1", "WO"}
 SWITCH_PITCH, GROUP_GAP = 17.0, 6.0
 LEVER_TILT = 30.0                  # degrees from straight out
-LEVER_PIVOT_Z = 6.4                # where the lever pivots (top of bushing)
+LEVER_PIVOT_Z = 3.4                # top of bushing: just ~2 mm above the nut
 LED_LIGHT_W = 600.0                # point light inside each lit LED
 SEG = 48
 
@@ -70,6 +70,96 @@ def mat(name, base, metallic=0.0, rough=0.4, emit=0.0, emit_col=None,
     return m
 
 
+PANEL_PAINT = (0.010, 0.012, 0.020, 1)   # very dark navy-black paint
+BARE_METAL = (0.42, 0.42, 0.44, 1)   # scuffed paint / exposed aluminium
+
+
+def make_panel_material():
+    """Painted aluminium plaque, satin finish, aged: fine scratches that go
+    through the paint (lighter / metallic / smoother), a few longer ones,
+    and blotchy roughness from handling.  Object coords are in mm."""
+    mt = bpy.data.materials.new("Panel_Painted")
+    mt.use_nodes = True
+    nt = mt.node_tree
+    N, L = nt.nodes, nt.links
+    bsdf = N["Principled BSDF"]
+    coord = N.new("ShaderNodeTexCoord")
+
+    def scratches(scale, stretch, angle_deg, width, density, seed_offset):
+        mp = N.new("ShaderNodeMapping")
+        mp.inputs["Location"].default_value = (seed_offset, seed_offset * 2, 0)
+        mp.inputs["Rotation"].default_value = (0, math.radians(angle_deg), 0)
+        mp.inputs["Scale"].default_value = (stretch, 1, 1)
+        L.new(coord.outputs["Object"], mp.inputs["Vector"])
+        vo = N.new("ShaderNodeTexVoronoi")
+        vo.feature = "DISTANCE_TO_EDGE"
+        vo.inputs["Scale"].default_value = scale
+        L.new(mp.outputs["Vector"], vo.inputs["Vector"])
+        lines = N.new("ShaderNodeMapRange")          # thin line where distance ~0
+        lines.inputs["From Min"].default_value = 0.0
+        lines.inputs["From Max"].default_value = width
+        lines.inputs["To Min"].default_value = 1.0
+        lines.inputs["To Max"].default_value = 0.0
+        L.new(vo.outputs["Distance"], lines.inputs["Value"])
+        sparse = N.new("ShaderNodeTexNoise")          # only keep some of them
+        sparse.inputs["Scale"].default_value = scale * 0.6
+        L.new(mp.outputs["Vector"], sparse.inputs["Vector"])
+        keep = N.new("ShaderNodeMapRange")
+        keep.inputs["From Min"].default_value = 1.0 - density
+        keep.inputs["From Max"].default_value = 1.0 - density + 0.05
+        L.new(sparse.outputs["Fac"], keep.inputs["Value"])
+        mul = N.new("ShaderNodeMath")
+        mul.operation = "MULTIPLY"
+        L.new(lines.outputs["Result"], mul.inputs[0])
+        L.new(keep.outputs["Result"], mul.inputs[1])
+        return mul.outputs["Value"]
+
+    fine = scratches(0.45, 0.15, 4, 0.03, 0.40, 0.0)      # many short, ~horizontal
+    cross = scratches(0.30, 0.20, -35, 0.03, 0.30, 7.3)    # some diagonal
+    long_ = scratches(0.07, 0.10, 12, 0.012, 0.25, 3.1)    # a few long ones
+    mx1 = N.new("ShaderNodeMath"); mx1.operation = "MAXIMUM"
+    L.new(fine, mx1.inputs[0]); L.new(cross, mx1.inputs[1])
+    mask = N.new("ShaderNodeMath"); mask.operation = "MAXIMUM"
+    L.new(mx1.outputs[0], mask.inputs[0]); L.new(long_, mask.inputs[1])
+    soft = N.new("ShaderNodeMath"); soft.operation = "MULTIPLY"   # partial wear
+    soft.inputs[1].default_value = 0.5
+    L.new(mask.outputs[0], soft.inputs[0])
+    m = soft.outputs[0]
+
+    col = N.new("ShaderNodeMix"); col.data_type = "RGBA"
+    col.inputs["A"].default_value = PANEL_PAINT
+    col.inputs["B"].default_value = BARE_METAL
+    L.new(m, col.inputs["Factor"])
+    L.new(col.outputs["Result"], bsdf.inputs["Base Color"])
+    met = N.new("ShaderNodeMath"); met.operation = "MULTIPLY"
+    met.inputs[1].default_value = 0.3
+    L.new(m, met.inputs[0]); L.new(met.outputs[0], bsdf.inputs["Metallic"])
+
+    smudge = N.new("ShaderNodeTexNoise")                    # handling / wear
+    smudge.inputs["Scale"].default_value = 0.025
+    smudge.inputs["Detail"].default_value = 6
+    L.new(coord.outputs["Object"], smudge.inputs["Vector"])
+    rough = N.new("ShaderNodeMapRange")
+    rough.inputs["To Min"].default_value = 0.34
+    rough.inputs["To Max"].default_value = 0.58
+    L.new(smudge.outputs["Fac"], rough.inputs["Value"])
+    r_mix = N.new("ShaderNodeMix")                           # scratches: shinier
+    r_mix.inputs["B"].default_value = 0.25
+    L.new(m, r_mix.inputs["Factor"])
+    L.new(rough.outputs["Result"], r_mix.inputs["A"])
+    L.new(r_mix.outputs["Result"], bsdf.inputs["Roughness"])
+
+    bump = N.new("ShaderNodeBump")                           # scratches cut in
+    bump.inputs["Strength"].default_value = 0.25
+    bump.inputs["Distance"].default_value = 0.05
+    inv = N.new("ShaderNodeMath"); inv.operation = "SUBTRACT"
+    inv.inputs[0].default_value = 1.0
+    L.new(m, inv.inputs[1]); L.new(inv.outputs[0], bump.inputs["Height"])
+    L.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    mt.use_fake_user = True
+    return mt
+
+
 def make_materials():
     m = {
         "chrome": mat("Chrome", (0.86, 0.86, 0.88, 1), 1.0, 0.14),
@@ -80,7 +170,7 @@ def make_materials():
                        emit=2.0, transmission=0.85, ior=1.5),
         "die_off": mat("LED_Die_Off", (0.2, 0.02, 0.02, 1), 0.0, 0.4),
         "die_on": mat("LED_Die_On", (1.0, 0.1, 0.05, 1), 0.0, 0.4, emit=25.0),
-        "panel": mat("Panel_Black", (0.006, 0.006, 0.008, 1), 0.0, 0.08),
+        "panel": make_panel_material(),
         "frame": mat("Frame_Blue", (0.22, 0.50, 0.75, 1), 1.0, 0.35),
         "text": mat("Silkscreen", COL_TEXT, 0.0, 0.6),
         "logo": mat("Logo_Gold", (0.80, 0.58, 0.22, 1), 1.0, 0.32),
@@ -90,8 +180,6 @@ def make_materials():
         "feet": mat("Rubber_Feet", (0.03, 0.03, 0.03, 1), 0.0, 0.8),
         "backdrop": mat("Floor", (0.10, 0.10, 0.11, 1), 0.0, 0.7),
     }
-    b = m["panel"].node_tree.nodes["Principled BSDF"]
-    b.inputs["Coat Weight"].default_value = 1.0      # smoked acrylic gloss
     return m
 
 
